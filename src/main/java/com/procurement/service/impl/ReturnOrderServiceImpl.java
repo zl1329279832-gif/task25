@@ -12,6 +12,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -20,6 +21,8 @@ public class ReturnOrderServiceImpl implements ReturnOrderService {
 
     private final ReturnOrderMapper returnOrderMapper;
     private final ReturnLineMapper returnLineMapper;
+    private final PurchaseOrderMapper poMapper;
+    private final PurchaseOrderLineMapper poLineMapper;
 
     @Override
     @Transactional
@@ -58,6 +61,7 @@ public class ReturnOrderServiceImpl implements ReturnOrderService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "MARK_RETURNED", entityType = "ReturnOrder")
     public void markReturned(Long id) {
         ReturnOrder ro = returnOrderMapper.selectById(id);
@@ -65,6 +69,43 @@ public class ReturnOrderServiceImpl implements ReturnOrderService {
         if (!"APPROVED".equals(ro.getStatus())) throw new BusinessException("退货单未审批通过");
         ro.setStatus("RETURNED");
         returnOrderMapper.updateById(ro);
+
+        // 回退 PO 行的已收货数量
+        if (ro.getPoId() != null) {
+            List<ReturnLine> retLines = returnLineMapper.selectList(
+                    new LambdaQueryWrapper<ReturnLine>().eq(ReturnLine::getReturnId, id));
+            List<PurchaseOrderLine> poLines = poLineMapper.selectList(
+                    new LambdaQueryWrapper<PurchaseOrderLine>().eq(PurchaseOrderLine::getPoId, ro.getPoId()));
+
+            for (ReturnLine rl : retLines) {
+                // 按 materialId 匹配 PO 行
+                for (PurchaseOrderLine poLine : poLines) {
+                    if (poLine.getMaterialId().equals(rl.getMaterialId())) {
+                        BigDecimal newReceivedQty = poLine.getReceivedQty().subtract(rl.getQuantity());
+                        poLine.setReceivedQty(newReceivedQty.max(BigDecimal.ZERO));
+                        poLineMapper.updateById(poLine);
+                        break;
+                    }
+                }
+            }
+
+            // 重新评估 PO 状态
+            PurchaseOrder po = poMapper.selectById(ro.getPoId());
+            if (po != null) {
+                boolean allReceived = poLines.stream()
+                        .allMatch(l -> l.getReceivedQty().compareTo(l.getQuantity()) >= 0);
+                boolean anyReceived = poLines.stream()
+                        .anyMatch(l -> l.getReceivedQty().compareTo(BigDecimal.ZERO) > 0);
+                if (allReceived) {
+                    po.setStatus(PoStatus.RECEIVED.name());
+                } else if (anyReceived) {
+                    po.setStatus(PoStatus.PARTIAL_RECEIVED.name());
+                } else {
+                    po.setStatus(PoStatus.CONFIRMED.name());
+                }
+                poMapper.updateById(po);
+            }
+        }
     }
 
     @Override

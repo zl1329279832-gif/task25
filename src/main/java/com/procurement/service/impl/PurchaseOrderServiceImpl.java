@@ -133,20 +133,35 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public PurchaseOrder getById(Long id) {
         PurchaseOrder po = poMapper.selectById(id);
         if (po == null) throw new BusinessException("采购订单不存在");
+        // 供应商权限隔离
+        LoginUser user = getCurrentUser();
+        if ("SUPPLIER".equals(user.getRole()) && !po.getSupplierId().equals(user.getSupplierId())) {
+            throw new BusinessException("无权访问此采购订单");
+        }
         return po;
     }
 
     @Override
     public List<PurchaseOrderLine> getLines(Long poId) {
+        // 先验证访问权限
+        getById(poId);
         return poLineMapper.selectList(
                 new LambdaQueryWrapper<PurchaseOrderLine>().eq(PurchaseOrderLine::getPoId, poId));
     }
 
     @Override
     public Page<PurchaseOrder> list(String status, Long supplierId, int page, int size) {
+        LoginUser user = getCurrentUser();
         LambdaQueryWrapper<PurchaseOrder> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(status)) wrapper.eq(PurchaseOrder::getStatus, status);
-        if (supplierId != null) wrapper.eq(PurchaseOrder::getSupplierId, supplierId);
+
+        // 供应商权限隔离：强制按当前供应商过滤
+        if ("SUPPLIER".equals(user.getRole())) {
+            wrapper.eq(PurchaseOrder::getSupplierId, user.getSupplierId());
+        } else if (supplierId != null) {
+            wrapper.eq(PurchaseOrder::getSupplierId, supplierId);
+        }
+
         wrapper.orderByDesc(PurchaseOrder::getCreatedAt);
         return poMapper.selectPage(new Page<>(page, size), wrapper);
     }

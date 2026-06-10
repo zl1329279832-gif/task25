@@ -37,6 +37,9 @@ class QuoteServiceTest {
     private RfqMapper rfqMapper;
 
     @Mock
+    private RfqSupplierMapper rfqSupplierMapper;
+
+    @Mock
     private RedisTemplate<String, Object> redisTemplate;
 
     @Mock
@@ -51,6 +54,7 @@ class QuoteServiceTest {
     void submitQuote_shouldRejectAfterDeadline() {
         Rfq rfq = new Rfq();
         rfq.setId(1L);
+        rfq.setStatus(RfqStatus.PUBLISHED.name());
         rfq.setDeadline(LocalDateTime.now().minusHours(1)); // 已过期
         when(rfqMapper.selectById(1L)).thenReturn(rfq);
 
@@ -66,10 +70,13 @@ class QuoteServiceTest {
     void submitQuote_shouldCreateFirstVersion() {
         Rfq rfq = new Rfq();
         rfq.setId(1L);
+        rfq.setStatus(RfqStatus.PUBLISHED.name());
         rfq.setDeadline(LocalDateTime.now().plusDays(7));
         when(rfqMapper.selectById(1L)).thenReturn(rfq);
+        when(rfqSupplierMapper.selectCount(any())).thenReturn(1L);
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any())).thenReturn(true);
         when(quoteMapper.selectOne(any())).thenReturn(null); // 无现有报价
+        when(quoteMapper.selectCount(any())).thenReturn(0L); // 无重复版本
         when(quoteMapper.insert(any())).thenReturn(1);
         when(quoteLineMapper.insert(any())).thenReturn(1);
 
@@ -89,8 +96,10 @@ class QuoteServiceTest {
     void submitQuote_shouldIncrementVersion() {
         Rfq rfq = new Rfq();
         rfq.setId(1L);
+        rfq.setStatus(RfqStatus.PUBLISHED.name());
         rfq.setDeadline(LocalDateTime.now().plusDays(7));
         when(rfqMapper.selectById(1L)).thenReturn(rfq);
+        when(rfqSupplierMapper.selectCount(any())).thenReturn(1L);
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any())).thenReturn(true);
 
         Quote existing = new Quote();
@@ -98,6 +107,7 @@ class QuoteServiceTest {
         existing.setVersion(2);
         existing.setFrozen(0);
         when(quoteMapper.selectOne(any())).thenReturn(existing);
+        when(quoteMapper.selectCount(any())).thenReturn(0L); // 无重复版本
         when(quoteMapper.insert(any())).thenReturn(1);
         when(quoteLineMapper.insert(any())).thenReturn(1);
 
@@ -115,8 +125,10 @@ class QuoteServiceTest {
     void submitQuote_shouldRejectWhenFrozen() {
         Rfq rfq = new Rfq();
         rfq.setId(1L);
+        rfq.setStatus(RfqStatus.PUBLISHED.name());
         rfq.setDeadline(LocalDateTime.now().plusDays(7));
         when(rfqMapper.selectById(1L)).thenReturn(rfq);
+        when(rfqSupplierMapper.selectCount(any())).thenReturn(1L);
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any())).thenReturn(true);
 
         Quote existing = new Quote();

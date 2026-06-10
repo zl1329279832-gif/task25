@@ -28,6 +28,8 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     private final ArrivalMapper arrivalMapper;
     private final InvoiceMapper invoiceMapper;
     private final InvoiceLineMapper invoiceLineMapper;
+    private final ReturnOrderMapper returnOrderMapper;
+    private final ReturnLineMapper returnLineMapper;
 
     @Override
     @Transactional
@@ -36,15 +38,25 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         PurchaseOrder po = poMapper.selectById(poId);
         if (po == null) throw new BusinessException("采购订单不存在");
 
+        // 校验 PO 状态：只有已收货（含部分）的订单才能对账
+        PoStatus poStatus = PoStatus.valueOf(po.getStatus());
+        if (poStatus != PoStatus.PARTIAL_RECEIVED && poStatus != PoStatus.RECEIVED) {
+            throw new BusinessException("当前订单状态不允许对账: " + poStatus);
+        }
+
         LoginUser user = getCurrentUser();
 
         // 获取订单行
         List<PurchaseOrderLine> poLines = poLineMapper.selectList(
                 new LambdaQueryWrapper<PurchaseOrderLine>().eq(PurchaseOrderLine::getPoId, poId));
 
-        // 获取所有到货行
+        // 获取所有到货行 - 只统计已验收(ACCEPTED/PARTIAL_ACCEPTED)的到货单
         List<Arrival> arrivals = arrivalMapper.selectList(
-                new LambdaQueryWrapper<Arrival>().eq(Arrival::getPoId, poId));
+                new LambdaQueryWrapper<Arrival>()
+                        .eq(Arrival::getPoId, poId)
+                        .in(Arrival::getStatus,
+                                ArrivalStatus.ACCEPTED.name(),
+                                ArrivalStatus.PARTIAL_ACCEPTED.name()));
         Map<Long, BigDecimal> acceptedQtyMap = new HashMap<>();
         for (Arrival arr : arrivals) {
             List<ArrivalLine> arrLines = arrivalLineMapper.selectList(
@@ -54,9 +66,25 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             }
         }
 
-        // 获取所有发票行
+        // 扣减已退货数量（APPROVED 或 RETURNED 状态的退货单）
+        List<ReturnOrder> returnOrders = returnOrderMapper.selectList(
+                new LambdaQueryWrapper<ReturnOrder>()
+                        .eq(ReturnOrder::getPoId, poId)
+                        .in(ReturnOrder::getStatus, "APPROVED", "RETURNED"));
+        Map<Long, BigDecimal> returnedQtyMap = new HashMap<>();
+        for (ReturnOrder ro : returnOrders) {
+            List<ReturnLine> retLines = returnLineMapper.selectList(
+                    new LambdaQueryWrapper<ReturnLine>().eq(ReturnLine::getReturnId, ro.getId()));
+            for (ReturnLine rl : retLines) {
+                returnedQtyMap.merge(rl.getMaterialId(), rl.getQuantity(), BigDecimal::add);
+            }
+        }
+
+        // 获取所有已验证的发票行（排除 REJECTED 状态的发票）
         List<Invoice> invoices = invoiceMapper.selectList(
-                new LambdaQueryWrapper<Invoice>().eq(Invoice::getPoId, poId));
+                new LambdaQueryWrapper<Invoice>()
+                        .eq(Invoice::getPoId, poId)
+                        .eq(Invoice::getStatus, "VERIFIED"));
         Map<Long, BigDecimal> invoiceQtyMap = new HashMap<>();
         BigDecimal totalInvoiceAmount = BigDecimal.ZERO;
         for (Invoice inv : invoices) {
@@ -89,7 +117,13 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             rl.setMaterialId(poLine.getMaterialId());
             rl.setPoLineId(poLine.getId());
             rl.setOrderedQty(poLine.getQuantity());
-            rl.setReceivedQty(acceptedQtyMap.getOrDefault(poLine.getId(), BigDecimal.ZERO));
+
+            // 计算净验收数量 = 验收数量 - 退货数量
+            BigDecimal accepted = acceptedQtyMap.getOrDefault(poLine.getId(), BigDecimal.ZERO);
+            BigDecimal returned = returnedQtyMap.getOrDefault(poLine.getMaterialId(), BigDecimal.ZERO);
+            BigDecimal netReceived = accepted.subtract(returned).max(BigDecimal.ZERO);
+
+            rl.setReceivedQty(netReceived);
             rl.setInvoicedQty(invoiceQtyMap.getOrDefault(poLine.getId(), BigDecimal.ZERO));
             rl.setUnitPrice(poLine.getUnitPrice());
 

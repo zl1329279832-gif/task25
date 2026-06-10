@@ -36,6 +36,8 @@ class ReconciliationServiceTest {
     @Mock private ArrivalMapper arrivalMapper;
     @Mock private InvoiceMapper invoiceMapper;
     @Mock private InvoiceLineMapper invoiceLineMapper;
+    @Mock private ReturnOrderMapper returnOrderMapper;
+    @Mock private ReturnLineMapper returnLineMapper;
 
     @BeforeEach
     void setUp() {
@@ -49,6 +51,7 @@ class ReconciliationServiceTest {
         PurchaseOrder po = new PurchaseOrder();
         po.setId(1L);
         po.setSupplierId(1L);
+        po.setStatus(PoStatus.RECEIVED.name());
         when(poMapper.selectById(1L)).thenReturn(po);
 
         PurchaseOrderLine poLine = new PurchaseOrderLine();
@@ -61,6 +64,7 @@ class ReconciliationServiceTest {
         // 收货数量 = 100
         Arrival arrival = new Arrival();
         arrival.setId(1L);
+        arrival.setStatus(ArrivalStatus.ACCEPTED.name());
         when(arrivalMapper.selectList(any())).thenReturn(List.of(arrival));
 
         ArrivalLine arrivalLine = new ArrivalLine();
@@ -68,9 +72,13 @@ class ReconciliationServiceTest {
         arrivalLine.setAcceptedQty(new BigDecimal("100"));
         when(arrivalLineMapper.selectList(any())).thenReturn(List.of(arrivalLine));
 
+        // 无退货
+        when(returnOrderMapper.selectList(any())).thenReturn(Collections.emptyList());
+
         // 发票金额 = 1000（100 * 10）
         Invoice invoice = new Invoice();
         invoice.setAmount(new BigDecimal("1000.00"));
+        invoice.setStatus("VERIFIED");
         when(invoiceMapper.selectList(any())).thenReturn(List.of(invoice));
 
         InvoiceLine invoiceLine = new InvoiceLine();
@@ -95,6 +103,7 @@ class ReconciliationServiceTest {
         PurchaseOrder po = new PurchaseOrder();
         po.setId(1L);
         po.setSupplierId(1L);
+        po.setStatus(PoStatus.PARTIAL_RECEIVED.name());
         when(poMapper.selectById(1L)).thenReturn(po);
 
         PurchaseOrderLine poLine = new PurchaseOrderLine();
@@ -107,6 +116,7 @@ class ReconciliationServiceTest {
         // 只收了 80 个
         Arrival arrival = new Arrival();
         arrival.setId(1L);
+        arrival.setStatus(ArrivalStatus.ACCEPTED.name());
         when(arrivalMapper.selectList(any())).thenReturn(List.of(arrival));
 
         ArrivalLine arrivalLine = new ArrivalLine();
@@ -114,9 +124,13 @@ class ReconciliationServiceTest {
         arrivalLine.setAcceptedQty(new BigDecimal("80"));
         when(arrivalLineMapper.selectList(any())).thenReturn(List.of(arrivalLine));
 
+        // 无退货
+        when(returnOrderMapper.selectList(any())).thenReturn(Collections.emptyList());
+
         // 发票开了 100 个的金额
         Invoice invoice = new Invoice();
         invoice.setAmount(new BigDecimal("1000.00"));
+        invoice.setStatus("VERIFIED");
         when(invoiceMapper.selectList(any())).thenReturn(List.of(invoice));
 
         InvoiceLine invoiceLine = new InvoiceLine();

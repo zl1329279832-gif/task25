@@ -50,6 +50,7 @@ public class ProcurementScheduler {
 
     /**
      * 每小时检查一次：审批超时提醒（超过48小时未审批）
+     * 幂等：同一业务实体+类型只在没有 PENDING 提醒时才创建
      */
     @Scheduled(cron = "0 0 * * * ?")
     public void checkApprovalTimeout() {
@@ -60,6 +61,19 @@ public class ProcurementScheduler {
                         .le(Approval::getCreatedAt, threshold));
 
         for (Approval approval : pendingApprovals) {
+            // 幂等检查：是否已存在同类型 PENDING 提醒
+            Long existingCount = reminderMapper.selectCount(
+                    new LambdaQueryWrapper<Reminder>()
+                            .eq(Reminder::getType, "PO_APPROVAL")
+                            .eq(Reminder::getBusinessType, approval.getBusinessType())
+                            .eq(Reminder::getBusinessId, approval.getBusinessId())
+                            .eq(Reminder::getStatus, "PENDING"));
+            if (existingCount > 0) {
+                log.debug("审批超时提醒已存在，跳过: businessType={}, businessId={}",
+                        approval.getBusinessType(), approval.getBusinessId());
+                continue;
+            }
+
             Reminder reminder = new Reminder();
             reminder.setType("PO_APPROVAL");
             reminder.setBusinessType(approval.getBusinessType());
@@ -77,6 +91,7 @@ public class ProcurementScheduler {
 
     /**
      * 每天 8:00 检查：订单已确认但超过预期时间未到货
+     * 幂等：同一 PO 只在没有 PENDING 提醒时才创建
      */
     @Scheduled(cron = "0 0 8 * * ?")
     public void checkArrivalOverdue() {
@@ -88,6 +103,18 @@ public class ProcurementScheduler {
                         .le(PurchaseOrder::getCreatedAt, threshold));
 
         for (PurchaseOrder po : overduePOs) {
+            // 幂等检查：是否已存在同类型 PENDING 提醒
+            Long existingCount = reminderMapper.selectCount(
+                    new LambdaQueryWrapper<Reminder>()
+                            .eq(Reminder::getType, "ARRIVAL_OVERDUE")
+                            .eq(Reminder::getBusinessType, "PO")
+                            .eq(Reminder::getBusinessId, po.getId())
+                            .eq(Reminder::getStatus, "PENDING"));
+            if (existingCount > 0) {
+                log.debug("到货超时提醒已存在，跳过: poNo={}", po.getPoNo());
+                continue;
+            }
+
             Reminder reminder = new Reminder();
             reminder.setType("ARRIVAL_OVERDUE");
             reminder.setBusinessType("PO");
