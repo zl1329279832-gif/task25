@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.service.QuoteService;
+import com.procurement.service.SupplierScoreService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -28,6 +29,7 @@ public class ProcurementScheduler {
     private final ApprovalMapper approvalMapper;
     private final ReminderMapper reminderMapper;
     private final PurchaseOrderMapper poMapper;
+    private final SupplierScoreService supplierScoreService;
 
     /**
      * 每10分钟检查一次：报价截止后自动冻结所有报价
@@ -117,5 +119,16 @@ public class ProcurementScheduler {
             reminderMapper.insert(reminder);
             log.info("创建到货超时提醒: poNo={}", po.getPoNo());
         }
+    }
+
+    /**
+     * 每天凌晨2:00重算所有活跃供应商的履约评分
+     */
+    @Scheduled(cron = "0 0 2 * * ?")
+    @Transactional
+    public void recalculateSupplierScores() {
+        log.info("开始重算供应商履约评分...");
+        supplierScoreService.recalculateAll();
+        log.info("供应商履约评分重算完成");
     }
 }

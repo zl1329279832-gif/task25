@@ -41,6 +41,12 @@ class PurchaseOrderServiceTest {
     @Mock
     private ApprovalMapper approvalMapper;
 
+    @Mock
+    private AdmissionControlService admissionControlService;
+
+    @Mock
+    private SupplierScoreService supplierScoreService;
+
     @BeforeEach
     void setUp() {
         LoginUser user = new LoginUser(1L, "purchaser01", "PURCHASER", null);

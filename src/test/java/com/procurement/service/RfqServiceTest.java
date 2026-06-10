@@ -41,6 +41,9 @@ class RfqServiceTest {
     @Mock
     private QuoteService quoteService;
 
+    @Mock
+    private AdmissionControlService admissionControlService;
+
     @BeforeEach
     void setUp() {
         LoginUser user = new LoginUser(1L, "purchaser01", "PURCHASER", null);

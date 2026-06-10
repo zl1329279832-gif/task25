@@ -65,3 +65,10 @@ INSERT INTO quote (quote_no, rfq_id, supplier_id, version, total_amount, status,
 INSERT INTO quote_line (quote_id, rfq_line_id, material_id, unit_price, quantity, delivery_days) VALUES
 (3, 1, 1, 4350.00, 100.00, 20),
 (3, 2, 4, 130.00, 500.00, 14);
+
+-- 评分规则版本（默认v1）
+INSERT INTO scoring_rule_version (version_no, weights, thresholds, effective_at, status, created_by) VALUES
+(1,
+ '{"quoteResponseTimeliness":15,"priceDeviation":15,"deliveryOnTime":15,"arrivalDiscrepancy":10,"qcFailureRate":15,"returnRate":10,"reconciliationDiff":10,"approvalAnomaly":10}',
+ '{"blacklistScore":20,"restrictedScore":50,"extraApprovalScore":70}',
+ NOW(), 'ACTIVE', 2);

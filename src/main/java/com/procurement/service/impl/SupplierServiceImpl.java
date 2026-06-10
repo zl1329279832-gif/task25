@@ -5,10 +5,15 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.procurement.audit.Auditable;
 import com.procurement.common.BusinessException;
 import com.procurement.entity.Supplier;
+import com.procurement.entity.SupplierScore;
 import com.procurement.mapper.SupplierMapper;
+import com.procurement.mapper.SupplierScoreMapper;
 import com.procurement.service.SupplierService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -16,6 +21,7 @@ import org.springframework.util.StringUtils;
 public class SupplierServiceImpl implements SupplierService {
 
     private final SupplierMapper supplierMapper;
+    private final SupplierScoreMapper supplierScoreMapper;
 
     @Override
     @Auditable(action = "CREATE_SUPPLIER", entityType = "Supplier")
@@ -51,6 +57,17 @@ public class SupplierServiceImpl implements SupplierService {
         if (s == null) throw new BusinessException("供应商不存在");
         s.setStatus("BLACKLISTED");
         supplierMapper.updateById(s);
+
+        // 黑名单联动：将评分归零
+        SupplierScore score = supplierScoreMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<SupplierScore>()
+                        .eq(SupplierScore::getSupplierId, id));
+        if (score != null) {
+            score.setTotalScore(BigDecimal.ZERO);
+            score.setCalculatedAt(LocalDateTime.now());
+            score.setSource("MANUAL");
+            supplierScoreMapper.updateById(score);
+        }
     }
 
     @Override

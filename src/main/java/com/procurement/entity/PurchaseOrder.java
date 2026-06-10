@@ -24,4 +24,6 @@ public class PurchaseOrder {
     private LocalDateTime updatedAt;
     @TableLogic
     private Integer deleted;
+    private BigDecimal supplierScore;
+    private Integer scoreRuleVersion;
 }

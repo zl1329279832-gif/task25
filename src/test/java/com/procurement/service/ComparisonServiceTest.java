@@ -32,6 +32,7 @@ class ComparisonServiceTest {
     @Mock private QuoteMapper quoteMapper;
     @Mock private QuoteLineMapper quoteLineMapper;
     @Mock private RfqMapper rfqMapper;
+    @Mock private AdmissionControlService admissionControlService;
 
     @BeforeEach
     void setUp() {

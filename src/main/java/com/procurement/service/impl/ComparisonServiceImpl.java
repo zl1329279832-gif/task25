@@ -6,6 +6,7 @@ import com.procurement.common.BusinessException;
 import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
+import com.procurement.service.AdmissionControlService;
 import com.procurement.service.ComparisonService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,6 +26,7 @@ public class ComparisonServiceImpl implements ComparisonService {
     private final QuoteMapper quoteMapper;
     private final QuoteLineMapper quoteLineMapper;
     private final RfqMapper rfqMapper;
+    private final AdmissionControlService admissionControlService;
 
     @Override
     @Transactional
@@ -102,6 +104,13 @@ public class ComparisonServiceImpl implements ComparisonService {
     @Override
     @Auditable(action = "SELECT_SUPPLIER", entityType = "Comparison")
     public void selectSupplier(Long comparisonId, Long quoteId) {
+        // 查找选中的报价，获取供应商ID
+        Quote quote = quoteMapper.selectById(quoteId);
+        if (quote != null) {
+            // 准入检查：报价采纳时的供应商准入控制
+            admissionControlService.checkAdmission(quote.getSupplierId(), "QUOTE_ACCEPT", comparisonId);
+        }
+
         List<ComparisonLine> lines = comparisonLineMapper.selectList(
                 new LambdaQueryWrapper<ComparisonLine>()
                         .eq(ComparisonLine::getComparisonId, comparisonId));

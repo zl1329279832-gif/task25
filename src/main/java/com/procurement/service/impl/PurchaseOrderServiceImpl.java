@@ -7,7 +7,9 @@ import com.procurement.common.BusinessException;
 import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
+import com.procurement.service.AdmissionControlService;
 import com.procurement.service.PurchaseOrderService;
+import com.procurement.service.SupplierScoreService;
 import com.procurement.state.PurchaseOrderStateMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -26,6 +28,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final PurchaseOrderMapper poMapper;
     private final PurchaseOrderLineMapper poLineMapper;
     private final ApprovalMapper approvalMapper;
+    private final AdmissionControlService admissionControlService;
+    private final SupplierScoreService supplierScoreService;
 
     @Override
     @Transactional
@@ -51,6 +55,17 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             line.setPoId(po.getId());
             poLineMapper.insert(line);
         }
+
+        // 创建供应商评分快照
+        try {
+            SupplierScoreSnapshot snapshot = supplierScoreService.createSnapshot(po.getId(), po.getSupplierId());
+            po.setSupplierScore(snapshot.getTotalScore());
+            po.setScoreRuleVersion(snapshot.getRuleVersionNo());
+            poMapper.updateById(po);
+        } catch (Exception e) {
+            // 评分快照创建失败不阻断PO创建
+        }
+
         return po;
     }
 
@@ -112,6 +127,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void confirm(Long poId) {
         PurchaseOrder po = poMapper.selectById(poId);
         if (po == null) throw new BusinessException("采购订单不存在");
+
+        // 准入检查：黑名单/停用/低分供应商会被拦截
+        admissionControlService.checkAdmission(po.getSupplierId(), "PO_CONFIRM", poId);
+
         PurchaseOrderStateMachine.validateTransition(
                 PoStatus.valueOf(po.getStatus()), PoStatus.CONFIRMED);
         po.setStatus(PoStatus.CONFIRMED.name());

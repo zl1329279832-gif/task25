@@ -137,7 +137,9 @@ CREATE TABLE IF NOT EXISTS purchase_order (
     created_by BIGINT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    deleted INT NOT NULL DEFAULT 0
+    deleted INT NOT NULL DEFAULT 0,
+    supplier_score DECIMAL(6,2),
+    score_rule_version INT
 );
 
 CREATE TABLE IF NOT EXISTS purchase_order_line (
@@ -294,4 +296,72 @@ CREATE TABLE IF NOT EXISTS reminder (
     trigger_time TIMESTAMP NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     idempotency_key VARCHAR(128)
+);
+
+CREATE TABLE IF NOT EXISTS scoring_rule_version (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    version_no INT NOT NULL UNIQUE,
+    weights TEXT NOT NULL,
+    thresholds TEXT NOT NULL,
+    effective_at TIMESTAMP NOT NULL,
+    status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+    created_by BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS supplier_score (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id BIGINT NOT NULL,
+    rule_version_id BIGINT NOT NULL,
+    total_score DECIMAL(6,2) NOT NULL,
+    sample_size INT NOT NULL DEFAULT 0,
+    calculated_at TIMESTAMP NOT NULL,
+    source VARCHAR(16) NOT NULL DEFAULT 'SYSTEM'
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_supplier_score ON supplier_score(supplier_id);
+
+CREATE TABLE IF NOT EXISTS supplier_score_detail (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_score_id BIGINT NOT NULL,
+    dimension VARCHAR(64) NOT NULL,
+    raw_value DECIMAL(12,4),
+    normalized_score DECIMAL(6,2) NOT NULL,
+    weight DECIMAL(5,2) NOT NULL,
+    weighted_score DECIMAL(6,2) NOT NULL,
+    data_summary TEXT
+);
+
+CREATE TABLE IF NOT EXISTS supplier_score_adjustment (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id BIGINT NOT NULL,
+    old_score DECIMAL(6,2) NOT NULL,
+    new_score DECIMAL(6,2) NOT NULL,
+    reason VARCHAR(512) NOT NULL,
+    adjusted_by BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS supplier_score_snapshot (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    po_id BIGINT NOT NULL,
+    supplier_id BIGINT NOT NULL,
+    total_score DECIMAL(6,2) NOT NULL,
+    rule_version_no INT NOT NULL,
+    snapshot_data TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uk_po_snapshot ON supplier_score_snapshot(po_id);
+
+CREATE TABLE IF NOT EXISTS supplier_admission_log (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id BIGINT NOT NULL,
+    checkpoint VARCHAR(32) NOT NULL,
+    decision VARCHAR(16) NOT NULL,
+    score_at_time DECIMAL(6,2),
+    rule_version_no INT,
+    reason VARCHAR(256),
+    operator_id BIGINT,
+    business_id BIGINT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

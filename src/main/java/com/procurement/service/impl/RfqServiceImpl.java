@@ -7,6 +7,7 @@ import com.procurement.common.BusinessException;
 import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
+import com.procurement.service.AdmissionControlService;
 import com.procurement.service.QuoteService;
 import com.procurement.service.RfqService;
 import com.procurement.state.RfqStateMachine;
@@ -27,6 +28,7 @@ public class RfqServiceImpl implements RfqService {
     private final RfqLineMapper rfqLineMapper;
     private final RfqSupplierMapper rfqSupplierMapper;
     private final QuoteService quoteService;
+    private final AdmissionControlService admissionControlService;
 
     @Override
     @Transactional
@@ -44,6 +46,15 @@ public class RfqServiceImpl implements RfqService {
         }
 
         for (Long sid : supplierIds) {
+            // 准入检查：黑名单和停用供应商会被拦截（抛异常）
+            // 低分供应商允许邀请但记录日志
+            try {
+                admissionControlService.checkAdmission(sid, "RFQ_INVITE", rfq.getId());
+            } catch (BusinessException e) {
+                // 跳过被拦截的供应商，不中断整个RFQ创建
+                continue;
+            }
+
             RfqSupplier rs = new RfqSupplier();
             rs.setRfqId(rfq.getId());
             rs.setSupplierId(sid);
