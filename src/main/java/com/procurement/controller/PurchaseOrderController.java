@@ -1,6 +1,7 @@
 package com.procurement.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.procurement.common.BusinessException;
 import com.procurement.common.Result;
 import com.procurement.entity.PurchaseOrder;
 import com.procurement.entity.PurchaseOrderLine;
@@ -76,7 +77,12 @@ public class PurchaseOrderController {
 
     @GetMapping("/{id}")
     public Result<PurchaseOrder> getById(@PathVariable Long id) {
-        return Result.ok(poService.getById(id));
+        PurchaseOrder po = poService.getById(id);
+        LoginUser user = getCurrentUser();
+        if ("SUPPLIER".equals(user.getRole()) && !user.getSupplierId().equals(po.getSupplierId())) {
+            throw new BusinessException("无权查看其他供应商的订单");
+        }
+        return Result.ok(po);
     }
 
     @GetMapping("/{id}/lines")
@@ -90,6 +96,10 @@ public class PurchaseOrderController {
             @RequestParam(required = false) Long supplierId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
+        LoginUser user = getCurrentUser();
+        if ("SUPPLIER".equals(user.getRole())) {
+            supplierId = user.getSupplierId();
+        }
         return Result.ok(poService.list(status, supplierId, page, size));
     }
 

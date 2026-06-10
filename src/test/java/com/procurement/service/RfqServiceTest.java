@@ -4,6 +4,7 @@ import com.procurement.common.BusinessException;
 import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
+import com.procurement.service.QuoteService;
 import com.procurement.service.impl.RfqServiceImpl;
 import com.procurement.state.RfqStateMachine;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +37,9 @@ class RfqServiceTest {
 
     @Mock
     private RfqSupplierMapper rfqSupplierMapper;
+
+    @Mock
+    private QuoteService quoteService;
 
     @BeforeEach
     void setUp() {
@@ -100,5 +104,19 @@ class RfqServiceTest {
                 RfqStateMachine.validateTransition(RfqStatus.CLOSED, RfqStatus.PUBLISHED));
         assertThrows(BusinessException.class, () ->
                 RfqStateMachine.validateTransition(RfqStatus.DRAFT, RfqStatus.CLOSED));
+    }
+
+    @Test
+    void close_shouldFreezeAllQuotes() {
+        Rfq rfq = new Rfq();
+        rfq.setId(1L);
+        rfq.setStatus(RfqStatus.PUBLISHED.name());
+        when(rfqMapper.selectById(1L)).thenReturn(rfq);
+        when(rfqMapper.updateById(any())).thenReturn(1);
+
+        rfqService.close(1L);
+
+        assertEquals(RfqStatus.CLOSED.name(), rfq.getStatus());
+        verify(quoteService).freezeAllByRfq(1L);
     }
 }

@@ -50,6 +50,7 @@ class ReconciliationServiceTest {
         po.setId(1L);
         po.setSupplierId(1L);
         when(poMapper.selectById(1L)).thenReturn(po);
+        when(reconMapper.selectOne(any())).thenReturn(null);
 
         PurchaseOrderLine poLine = new PurchaseOrderLine();
         poLine.setId(1L);
@@ -96,6 +97,7 @@ class ReconciliationServiceTest {
         po.setId(1L);
         po.setSupplierId(1L);
         when(poMapper.selectById(1L)).thenReturn(po);
+        when(reconMapper.selectOne(any())).thenReturn(null);
 
         PurchaseOrderLine poLine = new PurchaseOrderLine();
         poLine.setId(1L);
@@ -148,5 +150,69 @@ class ReconciliationServiceTest {
         reconService.approve(1L);
 
         assertEquals("APPROVED", recon.getStatus());
+    }
+
+    @Test
+    void generate_shouldUseAcceptedQtyAfterQcRejection() {
+        PurchaseOrder po = new PurchaseOrder();
+        po.setId(1L);
+        po.setSupplierId(1L);
+        when(poMapper.selectById(1L)).thenReturn(po);
+        when(reconMapper.selectOne(any())).thenReturn(null);
+
+        PurchaseOrderLine poLine = new PurchaseOrderLine();
+        poLine.setId(1L);
+        poLine.setMaterialId(1L);
+        poLine.setQuantity(new BigDecimal("100"));
+        poLine.setUnitPrice(new BigDecimal("10.00"));
+        when(poLineMapper.selectList(any())).thenReturn(List.of(poLine));
+
+        Arrival arrival = new Arrival();
+        arrival.setId(1L);
+        when(arrivalMapper.selectList(any())).thenReturn(List.of(arrival));
+
+        // QC 只验收了 70 个，30 个被退回
+        ArrivalLine arrivalLine = new ArrivalLine();
+        arrivalLine.setPoLineId(1L);
+        arrivalLine.setArrivedQty(new BigDecimal("100"));
+        arrivalLine.setAcceptedQty(new BigDecimal("70"));
+        when(arrivalLineMapper.selectList(any())).thenReturn(List.of(arrivalLine));
+
+        Invoice invoice = new Invoice();
+        invoice.setAmount(new BigDecimal("1000.00"));
+        when(invoiceMapper.selectList(any())).thenReturn(List.of(invoice));
+
+        InvoiceLine invoiceLine = new InvoiceLine();
+        invoiceLine.setPoLineId(1L);
+        invoiceLine.setQuantity(new BigDecimal("100"));
+        when(invoiceLineMapper.selectList(any())).thenReturn(List.of(invoiceLine));
+
+        when(reconMapper.insert(any())).thenReturn(1);
+        when(reconMapper.updateById(any())).thenReturn(1);
+        when(reconLineMapper.insert(any())).thenReturn(1);
+
+        Reconciliation result = reconService.generate(1L);
+
+        // 收货金额 = 70 * 10 = 700（用验收数量，非到货数量）
+        assertEquals(new BigDecimal("700.00"), result.getReceiptAmount());
+        assertEquals("DIFFERENT", result.getStatus());
+    }
+
+    @Test
+    void generate_shouldReturnExistingReconForIdempotency() {
+        PurchaseOrder po = new PurchaseOrder();
+        po.setId(1L);
+        po.setSupplierId(1L);
+        when(poMapper.selectById(1L)).thenReturn(po);
+
+        Reconciliation existing = new Reconciliation();
+        existing.setId(1L);
+        existing.setStatus("MATCHED");
+        when(reconMapper.selectOne(any())).thenReturn(existing);
+
+        Reconciliation result = reconService.generate(1L);
+
+        assertEquals(1L, result.getId());
+        verify(reconMapper, never()).insert(any());
     }
 }

@@ -1,11 +1,14 @@
 package com.procurement.controller;
 
+import com.procurement.common.BusinessException;
 import com.procurement.common.Result;
 import com.procurement.entity.Reconciliation;
 import com.procurement.entity.ReconciliationLine;
+import com.procurement.security.LoginUser;
 import com.procurement.service.ReconciliationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -40,7 +43,12 @@ public class ReconciliationController {
 
     @GetMapping("/{id}")
     public Result<Reconciliation> getById(@PathVariable Long id) {
-        return Result.ok(reconService.getById(id));
+        Reconciliation recon = reconService.getById(id);
+        LoginUser user = getCurrentUser();
+        if ("SUPPLIER".equals(user.getRole()) && !user.getSupplierId().equals(recon.getSupplierId())) {
+            throw new BusinessException("无权查看其他供应商的对账单");
+        }
+        return Result.ok(recon);
     }
 
     @GetMapping("/{id}/lines")
@@ -51,8 +59,17 @@ public class ReconciliationController {
     @GetMapping
     public Result<List<Reconciliation>> list(
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long supplierId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        return Result.ok(reconService.list(status, page, size));
+        LoginUser user = getCurrentUser();
+        if ("SUPPLIER".equals(user.getRole())) {
+            supplierId = user.getSupplierId();
+        }
+        return Result.ok(reconService.list(status, supplierId, page, size));
+    }
+
+    private LoginUser getCurrentUser() {
+        return (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 }

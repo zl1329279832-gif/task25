@@ -7,6 +7,7 @@ import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
 import com.procurement.service.ArrivalService;
+import com.procurement.state.ArrivalStateMachine;
 import com.procurement.state.PurchaseOrderStateMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -84,6 +85,9 @@ public class ArrivalServiceImpl implements ArrivalService {
     public void updateStatus(Long arrivalId, String status) {
         Arrival arrival = arrivalMapper.selectById(arrivalId);
         if (arrival == null) throw new BusinessException("到货单不存在");
+        ArrivalStatus current = ArrivalStatus.valueOf(arrival.getStatus());
+        ArrivalStatus target = ArrivalStatus.valueOf(status);
+        ArrivalStateMachine.validateTransition(current, target);
         arrival.setStatus(status);
         arrivalMapper.updateById(arrival);
     }

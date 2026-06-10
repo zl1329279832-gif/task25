@@ -52,6 +52,7 @@ public class ProcurementScheduler {
      * 每小时检查一次：审批超时提醒（超过48小时未审批）
      */
     @Scheduled(cron = "0 0 * * * ?")
+    @Transactional
     public void checkApprovalTimeout() {
         LocalDateTime threshold = LocalDateTime.now().minusHours(48);
         List<Approval> pendingApprovals = approvalMapper.selectList(
@@ -60,6 +61,13 @@ public class ProcurementScheduler {
                         .le(Approval::getCreatedAt, threshold));
 
         for (Approval approval : pendingApprovals) {
+            String idempotencyKey = "PO_APPROVAL:" + approval.getBusinessType() + ":" + approval.getBusinessId();
+
+            Long count = reminderMapper.selectCount(
+                    new LambdaQueryWrapper<Reminder>()
+                            .eq(Reminder::getIdempotencyKey, idempotencyKey));
+            if (count != null && count > 0) continue;
+
             Reminder reminder = new Reminder();
             reminder.setType("PO_APPROVAL");
             reminder.setBusinessType(approval.getBusinessType());
@@ -69,6 +77,7 @@ public class ProcurementScheduler {
                     approval.getBusinessType(), approval.getBusinessId()));
             reminder.setStatus("PENDING");
             reminder.setTriggerTime(LocalDateTime.now());
+            reminder.setIdempotencyKey(idempotencyKey);
             reminderMapper.insert(reminder);
             log.info("创建审批超时提醒: businessType={}, businessId={}",
                     approval.getBusinessType(), approval.getBusinessId());
@@ -79,6 +88,7 @@ public class ProcurementScheduler {
      * 每天 8:00 检查：订单已确认但超过预期时间未到货
      */
     @Scheduled(cron = "0 0 8 * * ?")
+    @Transactional
     public void checkArrivalOverdue() {
         // 查询 CONFIRMED 状态超过 30 天未到货的订单
         LocalDateTime threshold = LocalDateTime.now().minusDays(30);
@@ -88,6 +98,13 @@ public class ProcurementScheduler {
                         .le(PurchaseOrder::getCreatedAt, threshold));
 
         for (PurchaseOrder po : overduePOs) {
+            String idempotencyKey = "ARRIVAL_OVERDUE:PO:" + po.getId();
+
+            Long count = reminderMapper.selectCount(
+                    new LambdaQueryWrapper<Reminder>()
+                            .eq(Reminder::getIdempotencyKey, idempotencyKey));
+            if (count != null && count > 0) continue;
+
             Reminder reminder = new Reminder();
             reminder.setType("ARRIVAL_OVERDUE");
             reminder.setBusinessType("PO");
@@ -96,6 +113,7 @@ public class ProcurementScheduler {
             reminder.setMessage(String.format("到货超时提醒：采购订单 %s 已确认超过30天尚未到货", po.getPoNo()));
             reminder.setStatus("PENDING");
             reminder.setTriggerTime(LocalDateTime.now());
+            reminder.setIdempotencyKey(idempotencyKey);
             reminderMapper.insert(reminder);
             log.info("创建到货超时提醒: poNo={}", po.getPoNo());
         }

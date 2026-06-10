@@ -6,6 +6,7 @@ import com.procurement.common.BusinessException;
 import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.service.QuoteService;
+import com.procurement.state.QuoteStateMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -31,15 +32,7 @@ public class QuoteServiceImpl implements QuoteService {
     @Transactional
     @Auditable(action = "SUBMIT_QUOTE", entityType = "Quote")
     public Quote submitQuote(Long rfqId, Long supplierId, List<QuoteLine> lines) {
-        Rfq rfq = rfqMapper.selectById(rfqId);
-        if (rfq == null) throw new BusinessException("询价单不存在");
-
-        // 检查是否已过截止时间
-        if (LocalDateTime.now().isAfter(rfq.getDeadline())) {
-            throw new BusinessException("报价已截止，无法提交或修改");
-        }
-
-        // 使用 Redis 分布式锁防止并发问题
+        // 使用 Redis 分布式锁防止并发问题 — 先获取锁再检查状态
         String lockKey = QUOTE_LOCK_PREFIX + rfqId + ":" + supplierId;
         Boolean locked = redisTemplate.opsForValue().setIfAbsent(lockKey, "1", 30, TimeUnit.SECONDS);
         if (locked == null || !locked) {
@@ -47,6 +40,18 @@ public class QuoteServiceImpl implements QuoteService {
         }
 
         try {
+            // 锁内重新获取 RFQ，确保状态和截止时间的原子性检查
+            Rfq rfq = rfqMapper.selectById(rfqId);
+            if (rfq == null) throw new BusinessException("询价单不存在");
+
+            RfqStatus rfqStatus = RfqStatus.valueOf(rfq.getStatus());
+            if (rfqStatus == RfqStatus.CLOSED || rfqStatus == RfqStatus.CANCELLED) {
+                throw new BusinessException("询价单已关闭或已取消，无法提交报价");
+            }
+            if (LocalDateTime.now().isAfter(rfq.getDeadline())) {
+                throw new BusinessException("报价已截止，无法提交或修改");
+            }
+
             // 查找现有报价，确定版本号
             Quote existing = quoteMapper.selectOne(
                     new LambdaQueryWrapper<Quote>()
@@ -104,6 +109,7 @@ public class QuoteServiceImpl implements QuoteService {
     public void freezeQuote(Long quoteId) {
         Quote quote = quoteMapper.selectById(quoteId);
         if (quote == null) throw new BusinessException("报价单不存在");
+        QuoteStateMachine.validateTransition(QuoteStatus.valueOf(quote.getStatus()), QuoteStatus.FROZEN);
         quote.setFrozen(1);
         quote.setStatus(QuoteStatus.FROZEN.name());
         quoteMapper.updateById(quote);

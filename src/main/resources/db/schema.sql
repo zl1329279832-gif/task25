@@ -195,6 +195,8 @@ CREATE TABLE purchase_order_line (
     material_id     BIGINT       NOT NULL,
     quantity        DECIMAL(12,2) NOT NULL COMMENT '订购数量',
     received_qty    DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '已收货数量',
+    accepted_qty    DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '验收合格数量',
+    rejected_qty    DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '质检退回数量',
     unit_price      DECIMAL(12,4) NOT NULL,
     amount          DECIMAL(14,2),
     INDEX idx_po_id (po_id)
@@ -392,6 +394,7 @@ CREATE TABLE reminder (
     status          VARCHAR(16)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING / SENT / READ',
     trigger_time    DATETIME     NOT NULL,
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    idempotency_key VARCHAR(128) UNIQUE COMMENT '幂等键 type:businessType:businessId',
     INDEX idx_target (target_user_id, status),
     INDEX idx_trigger (trigger_time, status)
 ) ENGINE=InnoDB COMMENT='定时提醒';

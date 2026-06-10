@@ -19,5 +19,5 @@ public interface ReconciliationService {
     void reject(Long reconId, String remark);
     Reconciliation getById(Long id);
     List<ReconciliationLine> getLines(Long reconId);
-    List<Reconciliation> list(String status, int page, int size);
+    List<Reconciliation> list(String status, Long supplierId, int page, int size);
 }

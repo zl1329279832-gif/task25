@@ -7,6 +7,7 @@ import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
 import com.procurement.service.InvoiceService;
+import com.procurement.state.InvoiceStateMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -27,7 +28,7 @@ public class InvoiceServiceImpl implements InvoiceService {
     public Invoice register(Invoice invoice, List<InvoiceLine> lines) {
         LoginUser user = getCurrentUser();
         invoice.setRegisteredBy(user.getUserId());
-        invoice.setStatus("REGISTERED");
+        invoice.setStatus(InvoiceStatus.REGISTERED.name());
         invoiceMapper.insert(invoice);
 
         for (InvoiceLine line : lines) {
@@ -42,7 +43,8 @@ public class InvoiceServiceImpl implements InvoiceService {
     public void verify(Long id) {
         Invoice invoice = invoiceMapper.selectById(id);
         if (invoice == null) throw new BusinessException("发票不存在");
-        invoice.setStatus("VERIFIED");
+        InvoiceStateMachine.validateTransition(InvoiceStatus.valueOf(invoice.getStatus()), InvoiceStatus.VERIFIED);
+        invoice.setStatus(InvoiceStatus.VERIFIED.name());
         invoiceMapper.updateById(invoice);
     }
 
@@ -51,7 +53,8 @@ public class InvoiceServiceImpl implements InvoiceService {
     public void reject(Long id) {
         Invoice invoice = invoiceMapper.selectById(id);
         if (invoice == null) throw new BusinessException("发票不存在");
-        invoice.setStatus("REJECTED");
+        InvoiceStateMachine.validateTransition(InvoiceStatus.valueOf(invoice.getStatus()), InvoiceStatus.REJECTED);
+        invoice.setStatus(InvoiceStatus.REJECTED.name());
         invoiceMapper.updateById(invoice);
     }
 

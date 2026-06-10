@@ -7,6 +7,7 @@ import com.procurement.common.BusinessException;
 import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
+import com.procurement.service.QuoteService;
 import com.procurement.service.RfqService;
 import com.procurement.state.RfqStateMachine;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class RfqServiceImpl implements RfqService {
     private final RfqMapper rfqMapper;
     private final RfqLineMapper rfqLineMapper;
     private final RfqSupplierMapper rfqSupplierMapper;
+    private final QuoteService quoteService;
 
     @Override
     @Transactional
@@ -64,6 +66,7 @@ public class RfqServiceImpl implements RfqService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "CLOSE_RFQ", entityType = "Rfq")
     public void close(Long rfqId) {
         Rfq rfq = rfqMapper.selectById(rfqId);
@@ -71,6 +74,7 @@ public class RfqServiceImpl implements RfqService {
         RfqStateMachine.validateTransition(RfqStatus.valueOf(rfq.getStatus()), RfqStatus.CLOSED);
         rfq.setStatus(RfqStatus.CLOSED.name());
         rfqMapper.updateById(rfq);
+        quoteService.freezeAllByRfq(rfqId);
     }
 
     @Override

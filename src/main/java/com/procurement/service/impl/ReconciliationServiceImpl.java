@@ -7,6 +7,7 @@ import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
 import com.procurement.service.ReconciliationService;
+import com.procurement.state.ReconciliationStateMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,17 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     public Reconciliation generate(Long poId) {
         PurchaseOrder po = poMapper.selectById(poId);
         if (po == null) throw new BusinessException("采购订单不存在");
+
+        // 幂等检查：如果已存在非REJECTED的对账单，直接返回
+        Reconciliation existing = reconMapper.selectOne(
+                new LambdaQueryWrapper<Reconciliation>()
+                        .eq(Reconciliation::getPoId, poId)
+                        .ne(Reconciliation::getStatus, ReconciliationStatus.REJECTED.name())
+                        .orderByDesc(Reconciliation::getCreatedAt)
+                        .last("LIMIT 1"));
+        if (existing != null) {
+            return existing;
+        }
 
         LoginUser user = getCurrentUser();
 
@@ -77,7 +89,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         recon.setPoId(poId);
         recon.setSupplierId(po.getSupplierId());
         recon.setInvoiceAmount(totalInvoiceAmount);
-        recon.setStatus("PENDING");
+        recon.setStatus(ReconciliationStatus.PENDING.name());
         recon.setCreatedBy(user.getUserId());
 
         reconMapper.insert(recon);
@@ -112,7 +124,8 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         recon.setReceiptAmount(receiptAmount);
         // diff_amount 由数据库生成列计算
         BigDecimal diffAmount = totalInvoiceAmount.subtract(receiptAmount);
-        recon.setStatus(diffAmount.compareTo(BigDecimal.ZERO) == 0 ? "MATCHED" : "DIFFERENT");
+        recon.setStatus(diffAmount.compareTo(BigDecimal.ZERO) == 0
+                ? ReconciliationStatus.MATCHED.name() : ReconciliationStatus.DIFFERENT.name());
         reconMapper.updateById(recon);
 
         return recon;
@@ -123,7 +136,9 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     public void approve(Long reconId) {
         Reconciliation recon = reconMapper.selectById(reconId);
         if (recon == null) throw new BusinessException("对账单不存在");
-        recon.setStatus("APPROVED");
+        ReconciliationStatus current = ReconciliationStatus.valueOf(recon.getStatus());
+        ReconciliationStateMachine.validateTransition(current, ReconciliationStatus.APPROVED);
+        recon.setStatus(ReconciliationStatus.APPROVED.name());
         reconMapper.updateById(recon);
     }
 
@@ -132,7 +147,9 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     public void reject(Long reconId, String remark) {
         Reconciliation recon = reconMapper.selectById(reconId);
         if (recon == null) throw new BusinessException("对账单不存在");
-        recon.setStatus("REJECTED");
+        ReconciliationStatus current = ReconciliationStatus.valueOf(recon.getStatus());
+        ReconciliationStateMachine.validateTransition(current, ReconciliationStatus.REJECTED);
+        recon.setStatus(ReconciliationStatus.REJECTED.name());
         recon.setRemark(remark);
         reconMapper.updateById(recon);
     }
@@ -151,9 +168,10 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     }
 
     @Override
-    public List<Reconciliation> list(String status, int page, int size) {
+    public List<Reconciliation> list(String status, Long supplierId, int page, int size) {
         LambdaQueryWrapper<Reconciliation> wrapper = new LambdaQueryWrapper<>();
         if (status != null) wrapper.eq(Reconciliation::getStatus, status);
+        if (supplierId != null) wrapper.eq(Reconciliation::getSupplierId, supplierId);
         wrapper.orderByDesc(Reconciliation::getCreatedAt);
         return reconMapper.selectPage(
                 new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size), wrapper).getRecords();

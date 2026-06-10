@@ -146,6 +146,8 @@ CREATE TABLE IF NOT EXISTS purchase_order_line (
     material_id BIGINT NOT NULL,
     quantity DECIMAL(12,2) NOT NULL,
     received_qty DECIMAL(12,2) NOT NULL DEFAULT 0,
+    accepted_qty DECIMAL(12,2) NOT NULL DEFAULT 0,
+    rejected_qty DECIMAL(12,2) NOT NULL DEFAULT 0,
     unit_price DECIMAL(12,4) NOT NULL,
     amount DECIMAL(14,2)
 );
@@ -290,5 +292,6 @@ CREATE TABLE IF NOT EXISTS reminder (
     message VARCHAR(256) NOT NULL,
     status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
     trigger_time TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    idempotency_key VARCHAR(128)
 );

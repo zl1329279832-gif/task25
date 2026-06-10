@@ -7,6 +7,7 @@ import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
 import com.procurement.service.QualityInspectionService;
+import com.procurement.state.ArrivalStateMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class QualityInspectionServiceImpl implements QualityInspectionService {
     private final QualityInspectionMapper inspectionMapper;
     private final ArrivalMapper arrivalMapper;
     private final ArrivalLineMapper arrivalLineMapper;
+    private final PurchaseOrderLineMapper poLineMapper;
 
     @Override
     @Transactional
@@ -43,7 +45,7 @@ public class QualityInspectionServiceImpl implements QualityInspectionService {
         inspection.setInspectedAt(LocalDateTime.now());
         inspectionMapper.insert(inspection);
 
-        // 更新到货行项的验收数量
+        // 更新到货行项的验收数量，同步回写 PO 行的验收/退回数量
         for (Map<String, Object> lr : lineResults) {
             Long lineId = Long.valueOf(lr.get("lineId").toString());
             BigDecimal acceptedQty = new BigDecimal(lr.get("acceptedQty").toString());
@@ -51,15 +53,29 @@ public class QualityInspectionServiceImpl implements QualityInspectionService {
             if (line != null) {
                 line.setAcceptedQty(acceptedQty);
                 arrivalLineMapper.updateById(line);
+
+                // 回写 PO 行的 acceptedQty / rejectedQty
+                PurchaseOrderLine poLine = poLineMapper.selectById(line.getPoLineId());
+                if (poLine != null) {
+                    BigDecimal rejectedQty = line.getArrivedQty().subtract(acceptedQty);
+                    poLine.setAcceptedQty(poLine.getAcceptedQty().add(acceptedQty));
+                    poLine.setRejectedQty(poLine.getRejectedQty().add(rejectedQty));
+                    poLineMapper.updateById(poLine);
+                }
             }
         }
 
-        // 更新到货单状态
+        // 更新到货单状态（使用状态机校验）
+        ArrivalStatus currentStatus = ArrivalStatus.valueOf(arrival.getStatus());
+        ArrivalStatus newStatus;
         switch (result) {
-            case "PASS" -> arrival.setStatus(ArrivalStatus.ACCEPTED.name());
-            case "FAIL" -> arrival.setStatus(ArrivalStatus.REJECTED.name());
-            case "CONDITIONAL" -> arrival.setStatus(ArrivalStatus.PARTIAL_ACCEPTED.name());
+            case "PASS" -> newStatus = ArrivalStatus.ACCEPTED;
+            case "FAIL" -> newStatus = ArrivalStatus.REJECTED;
+            case "CONDITIONAL" -> newStatus = ArrivalStatus.PARTIAL_ACCEPTED;
+            default -> throw new BusinessException("无效质检结果: " + result);
         }
+        ArrivalStateMachine.validateTransition(currentStatus, newStatus);
+        arrival.setStatus(newStatus.name());
         arrivalMapper.updateById(arrival);
 
         return inspection;

@@ -1,12 +1,15 @@
 package com.procurement.controller;
 
+import com.procurement.common.BusinessException;
 import com.procurement.common.Result;
 import com.procurement.entity.Invoice;
 import com.procurement.entity.InvoiceLine;
+import com.procurement.security.LoginUser;
 import com.procurement.service.InvoiceService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -60,7 +63,12 @@ public class InvoiceController {
 
     @GetMapping("/{id}")
     public Result<Invoice> getById(@PathVariable Long id) {
-        return Result.ok(invoiceService.getById(id));
+        Invoice invoice = invoiceService.getById(id);
+        LoginUser user = getCurrentUser();
+        if ("SUPPLIER".equals(user.getRole()) && !user.getSupplierId().equals(invoice.getSupplierId())) {
+            throw new BusinessException("无权查看其他供应商的发票");
+        }
+        return Result.ok(invoice);
     }
 
     @GetMapping("/{id}/lines")
@@ -71,5 +79,9 @@ public class InvoiceController {
     @GetMapping("/po/{poId}")
     public Result<List<Invoice>> getByPo(@PathVariable Long poId) {
         return Result.ok(invoiceService.getByPoId(poId));
+    }
+
+    private LoginUser getCurrentUser() {
+        return (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 }

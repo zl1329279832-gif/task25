@@ -40,6 +40,8 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         for (PurchaseOrderLine line : lines) {
             line.setAmount(line.getUnitPrice().multiply(line.getQuantity()));
             line.setReceivedQty(BigDecimal.ZERO);
+            line.setAcceptedQty(BigDecimal.ZERO);
+            line.setRejectedQty(BigDecimal.ZERO);
             total = total.add(line.getAmount());
         }
         po.setTotalAmount(total);
@@ -53,6 +55,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "SUBMIT_PO_APPROVAL", entityType = "PurchaseOrder")
     public void submitForApproval(Long poId) {
         PurchaseOrder po = poMapper.selectById(poId);
@@ -74,6 +77,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "APPROVE_PO", entityType = "PurchaseOrder")
     public void approve(Long poId, Long approverId) {
         PurchaseOrder po = poMapper.selectById(poId);
@@ -89,6 +93,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "REJECT_PO", entityType = "PurchaseOrder")
     public void reject(Long poId, Long approverId, String comment) {
         PurchaseOrder po = poMapper.selectById(poId);
@@ -102,6 +107,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "CONFIRM_PO", entityType = "PurchaseOrder")
     public void confirm(Long poId) {
         PurchaseOrder po = poMapper.selectById(poId);
@@ -113,6 +119,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "CANCEL_PO", entityType = "PurchaseOrder")
     public void cancel(Long poId, String reason) {
         PurchaseOrder po = poMapper.selectById(poId);

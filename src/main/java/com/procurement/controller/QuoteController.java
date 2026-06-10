@@ -34,11 +34,14 @@ public class QuoteController {
     }
 
     @GetMapping("/rfq/{rfqId}/latest")
-    public Result<Quote> getLatest(@PathVariable Long rfqId, @RequestParam Long supplierId) {
+    public Result<Quote> getLatest(@PathVariable Long rfqId) {
+        LoginUser user = getCurrentUser();
+        Long supplierId = "SUPPLIER".equals(user.getRole()) ? user.getSupplierId() : null;
         return Result.ok(quoteService.getLatestQuote(rfqId, supplierId));
     }
 
     @GetMapping("/rfq/{rfqId}")
+    @PreAuthorize("hasAnyRole('PURCHASER','PURCHASE_MANAGER')")
     public Result<List<Quote>> getAllByRfq(@PathVariable Long rfqId) {
         return Result.ok(quoteService.getAllQuotesByRfq(rfqId));
     }

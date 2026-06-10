@@ -51,7 +51,9 @@ class QuoteServiceTest {
     void submitQuote_shouldRejectAfterDeadline() {
         Rfq rfq = new Rfq();
         rfq.setId(1L);
+        rfq.setStatus(RfqStatus.PUBLISHED.name());
         rfq.setDeadline(LocalDateTime.now().minusHours(1)); // 已过期
+        when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any())).thenReturn(true);
         when(rfqMapper.selectById(1L)).thenReturn(rfq);
 
         QuoteLine line = new QuoteLine();
@@ -66,6 +68,7 @@ class QuoteServiceTest {
     void submitQuote_shouldCreateFirstVersion() {
         Rfq rfq = new Rfq();
         rfq.setId(1L);
+        rfq.setStatus(RfqStatus.PUBLISHED.name());
         rfq.setDeadline(LocalDateTime.now().plusDays(7));
         when(rfqMapper.selectById(1L)).thenReturn(rfq);
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any())).thenReturn(true);
@@ -89,6 +92,7 @@ class QuoteServiceTest {
     void submitQuote_shouldIncrementVersion() {
         Rfq rfq = new Rfq();
         rfq.setId(1L);
+        rfq.setStatus(RfqStatus.PUBLISHED.name());
         rfq.setDeadline(LocalDateTime.now().plusDays(7));
         when(rfqMapper.selectById(1L)).thenReturn(rfq);
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any())).thenReturn(true);
@@ -115,6 +119,7 @@ class QuoteServiceTest {
     void submitQuote_shouldRejectWhenFrozen() {
         Rfq rfq = new Rfq();
         rfq.setId(1L);
+        rfq.setStatus(RfqStatus.PUBLISHED.name());
         rfq.setDeadline(LocalDateTime.now().plusDays(7));
         when(rfqMapper.selectById(1L)).thenReturn(rfq);
         when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any())).thenReturn(true);
@@ -138,6 +143,7 @@ class QuoteServiceTest {
         Quote quote = new Quote();
         quote.setId(1L);
         quote.setFrozen(0);
+        quote.setStatus(QuoteStatus.SUBMITTED.name());
         when(quoteMapper.selectById(1L)).thenReturn(quote);
         when(quoteMapper.updateById(any())).thenReturn(1);
 
@@ -164,5 +170,39 @@ class QuoteServiceTest {
         verify(quoteMapper, times(2)).updateById(any());
         assertEquals(1, q1.getFrozen());
         assertEquals(1, q2.getFrozen());
+    }
+
+    @Test
+    void submitQuote_shouldRejectWhenRfqClosed() {
+        Rfq rfq = new Rfq();
+        rfq.setId(1L);
+        rfq.setStatus(RfqStatus.CLOSED.name());
+        rfq.setDeadline(LocalDateTime.now().plusDays(7));
+        when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any())).thenReturn(true);
+        when(rfqMapper.selectById(1L)).thenReturn(rfq);
+
+        QuoteLine line = new QuoteLine();
+        line.setUnitPrice(new BigDecimal("100"));
+        line.setQuantity(new BigDecimal("10"));
+
+        assertThrows(BusinessException.class, () ->
+                quoteService.submitQuote(1L, 1L, List.of(line)));
+    }
+
+    @Test
+    void submitQuote_shouldRejectWhenRfqCancelled() {
+        Rfq rfq = new Rfq();
+        rfq.setId(1L);
+        rfq.setStatus(RfqStatus.CANCELLED.name());
+        rfq.setDeadline(LocalDateTime.now().plusDays(7));
+        when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any())).thenReturn(true);
+        when(rfqMapper.selectById(1L)).thenReturn(rfq);
+
+        QuoteLine line = new QuoteLine();
+        line.setUnitPrice(new BigDecimal("100"));
+        line.setQuantity(new BigDecimal("10"));
+
+        assertThrows(BusinessException.class, () ->
+                quoteService.submitQuote(1L, 1L, List.of(line)));
     }
 }

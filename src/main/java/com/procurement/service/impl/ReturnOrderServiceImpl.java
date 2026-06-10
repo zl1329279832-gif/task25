@@ -27,7 +27,7 @@ public class ReturnOrderServiceImpl implements ReturnOrderService {
     public ReturnOrder create(ReturnOrder ro, List<ReturnLine> lines) {
         LoginUser user = getCurrentUser();
         ro.setCreatedBy(user.getUserId());
-        ro.setStatus("PENDING");
+        ro.setStatus(ReturnOrderStatus.PENDING.name());
         ro.setReturnNo("RET-" + System.currentTimeMillis());
         returnOrderMapper.insert(ro);
 
@@ -43,8 +43,8 @@ public class ReturnOrderServiceImpl implements ReturnOrderService {
     public void approve(Long id) {
         ReturnOrder ro = returnOrderMapper.selectById(id);
         if (ro == null) throw new BusinessException("退货单不存在");
-        if (!"PENDING".equals(ro.getStatus())) throw new BusinessException("当前状态不允许审批");
-        ro.setStatus("APPROVED");
+        if (!ReturnOrderStatus.PENDING.name().equals(ro.getStatus())) throw new BusinessException("当前状态不允许审批");
+        ro.setStatus(ReturnOrderStatus.APPROVED.name());
         returnOrderMapper.updateById(ro);
     }
 
@@ -53,7 +53,7 @@ public class ReturnOrderServiceImpl implements ReturnOrderService {
     public void reject(Long id) {
         ReturnOrder ro = returnOrderMapper.selectById(id);
         if (ro == null) throw new BusinessException("退货单不存在");
-        ro.setStatus("REJECTED");
+        ro.setStatus(ReturnOrderStatus.REJECTED.name());
         returnOrderMapper.updateById(ro);
     }
 
@@ -62,8 +62,8 @@ public class ReturnOrderServiceImpl implements ReturnOrderService {
     public void markReturned(Long id) {
         ReturnOrder ro = returnOrderMapper.selectById(id);
         if (ro == null) throw new BusinessException("退货单不存在");
-        if (!"APPROVED".equals(ro.getStatus())) throw new BusinessException("退货单未审批通过");
-        ro.setStatus("RETURNED");
+        if (!ReturnOrderStatus.APPROVED.name().equals(ro.getStatus())) throw new BusinessException("退货单未审批通过");
+        ro.setStatus(ReturnOrderStatus.RETURNED.name());
         returnOrderMapper.updateById(ro);
     }
 

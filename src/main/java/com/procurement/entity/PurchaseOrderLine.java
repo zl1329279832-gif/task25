@@ -14,6 +14,8 @@ public class PurchaseOrderLine {
     private Long materialId;
     private BigDecimal quantity;
     private BigDecimal receivedQty;
+    private BigDecimal acceptedQty;
+    private BigDecimal rejectedQty;
     private BigDecimal unitPrice;
     private BigDecimal amount;
 }

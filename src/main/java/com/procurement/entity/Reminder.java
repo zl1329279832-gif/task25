@@ -18,4 +18,5 @@ public class Reminder {
     private String status;
     private LocalDateTime triggerTime;
     private LocalDateTime createdAt;
+    private String idempotencyKey;
 }
