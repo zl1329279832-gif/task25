@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:procurement_test;DB_CLOSE_DELAY=-1;MODE=MySQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  sql:
+    init:
+      mode: never
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+jwt:
+  secret: test-secret-key-for-unit-testing-only-needs-to-be-long-enough
+  expiration: 3600000
+
+logging:
+  level:
+    com.procurement: DEBUG
