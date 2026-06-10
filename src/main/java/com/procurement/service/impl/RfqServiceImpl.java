@@ -9,6 +9,7 @@ import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
 import com.procurement.service.QuoteService;
 import com.procurement.service.RfqService;
+import com.procurement.service.SupplierScoreService;
 import com.procurement.state.RfqStateMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -27,6 +28,7 @@ public class RfqServiceImpl implements RfqService {
     private final RfqLineMapper rfqLineMapper;
     private final RfqSupplierMapper rfqSupplierMapper;
     private final QuoteService quoteService;
+    private final SupplierScoreService supplierScoreService;
 
     @Override
     @Transactional
@@ -44,6 +46,9 @@ public class RfqServiceImpl implements RfqService {
         }
 
         for (Long sid : supplierIds) {
+            // 准入校验：黑名单拦截，低分预警
+            supplierScoreService.checkSupplierAccess(sid, "RFQ_INVITE");
+
             RfqSupplier rs = new RfqSupplier();
             rs.setRfqId(rfq.getId());
             rs.setSupplierId(sid);

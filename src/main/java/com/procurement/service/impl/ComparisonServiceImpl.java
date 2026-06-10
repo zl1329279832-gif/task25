@@ -7,6 +7,7 @@ import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
 import com.procurement.service.ComparisonService;
+import com.procurement.service.SupplierScoreService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ public class ComparisonServiceImpl implements ComparisonService {
     private final QuoteMapper quoteMapper;
     private final QuoteLineMapper quoteLineMapper;
     private final RfqMapper rfqMapper;
+    private final SupplierScoreService supplierScoreService;
 
     @Override
     @Transactional
@@ -105,6 +107,14 @@ public class ComparisonServiceImpl implements ComparisonService {
         List<ComparisonLine> lines = comparisonLineMapper.selectList(
                 new LambdaQueryWrapper<ComparisonLine>()
                         .eq(ComparisonLine::getComparisonId, comparisonId));
+
+        // 对选中的供应商进行准入校验
+        for (ComparisonLine line : lines) {
+            if (line.getQuoteId().equals(quoteId)) {
+                supplierScoreService.checkSupplierAccess(line.getSupplierId(), "QUOTE_ACCEPT");
+            }
+        }
+
         for (ComparisonLine line : lines) {
             line.setSelected(line.getQuoteId().equals(quoteId) ? 1 : 0);
             comparisonLineMapper.updateById(line);

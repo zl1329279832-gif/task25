@@ -8,6 +8,7 @@ import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
 import com.procurement.service.PurchaseOrderService;
+import com.procurement.service.SupplierScoreService;
 import com.procurement.state.PurchaseOrderStateMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -26,6 +27,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final PurchaseOrderMapper poMapper;
     private final PurchaseOrderLineMapper poLineMapper;
     private final ApprovalMapper approvalMapper;
+    private final SupplierScoreService supplierScoreService;
 
     @Override
     @Transactional
@@ -112,10 +114,17 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void confirm(Long poId) {
         PurchaseOrder po = poMapper.selectById(poId);
         if (po == null) throw new BusinessException("采购订单不存在");
+
+        // 准入校验：黑名单拦截，低分预警
+        supplierScoreService.checkSupplierAccess(po.getSupplierId(), "PO_CONFIRM");
+
         PurchaseOrderStateMachine.validateTransition(
                 PoStatus.valueOf(po.getStatus()), PoStatus.CONFIRMED);
         po.setStatus(PoStatus.CONFIRMED.name());
         poMapper.updateById(po);
+
+        // 保存评分快照
+        supplierScoreService.createSnapshot(po.getSupplierId(), "PO", poId);
     }
 
     @Override

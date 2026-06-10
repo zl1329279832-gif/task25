@@ -398,3 +398,97 @@ CREATE TABLE reminder (
     INDEX idx_target (target_user_id, status),
     INDEX idx_trigger (trigger_time, status)
 ) ENGINE=InnoDB COMMENT='定时提醒';
+
+-- -----------------------------------------------------------
+-- 25. 供应商评分规则版本 (supplier_score_rule)
+-- -----------------------------------------------------------
+CREATE TABLE supplier_score_rule (
+    id                      BIGINT AUTO_INCREMENT PRIMARY KEY,
+    version                 INT          NOT NULL UNIQUE COMMENT '规则版本号',
+    name                    VARCHAR(128) NOT NULL COMMENT '版本名称',
+    quote_response_weight   DECIMAL(5,2) NOT NULL DEFAULT 10.00 COMMENT '报价响应时效权重',
+    price_deviation_weight  DECIMAL(5,2) NOT NULL DEFAULT 15.00 COMMENT '价格偏离权重',
+    delivery_on_time_weight DECIMAL(5,2) NOT NULL DEFAULT 20.00 COMMENT '交付准时率权重',
+    arrival_diff_weight     DECIMAL(5,2) NOT NULL DEFAULT 10.00 COMMENT '到货差异权重',
+    qc_reject_weight        DECIMAL(5,2) NOT NULL DEFAULT 20.00 COMMENT '质检不合格率权重',
+    return_rate_weight      DECIMAL(5,2) NOT NULL DEFAULT 10.00 COMMENT '退货率权重',
+    invoice_diff_weight     DECIMAL(5,2) NOT NULL DEFAULT 10.00 COMMENT '发票对账差异权重',
+    approval_anomaly_weight DECIMAL(5,2) NOT NULL DEFAULT 5.00  COMMENT '审批异常权重',
+    warning_threshold       DECIMAL(5,2) NOT NULL DEFAULT 60.00 COMMENT '警告阈值',
+    block_threshold         DECIMAL(5,2) NOT NULL DEFAULT 40.00 COMMENT '拉黑阈值',
+    active                  TINYINT      NOT NULL DEFAULT 0 COMMENT '1=当前生效',
+    created_by              BIGINT       NOT NULL,
+    created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB COMMENT='供应商评分规则版本';
+
+-- -----------------------------------------------------------
+-- 26. 供应商评分汇总 (supplier_score)
+-- -----------------------------------------------------------
+CREATE TABLE supplier_score (
+    id                      BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id             BIGINT       NOT NULL UNIQUE COMMENT '供应商ID',
+    rule_version            INT          NOT NULL COMMENT '使用的规则版本',
+    total_score             DECIMAL(6,2) NOT NULL DEFAULT 100.00 COMMENT '综合总分',
+    quote_response_score    DECIMAL(6,2) DEFAULT 100.00,
+    price_deviation_score   DECIMAL(6,2) DEFAULT 100.00,
+    delivery_on_time_score  DECIMAL(6,2) DEFAULT 100.00,
+    arrival_diff_score      DECIMAL(6,2) DEFAULT 100.00,
+    qc_reject_score         DECIMAL(6,2) DEFAULT 100.00,
+    return_rate_score        DECIMAL(6,2) DEFAULT 100.00,
+    invoice_diff_score      DECIMAL(6,2) DEFAULT 100.00,
+    approval_anomaly_score  DECIMAL(6,2) DEFAULT 100.00,
+    score_level             VARCHAR(16)  NOT NULL DEFAULT 'EXCELLENT' COMMENT 'EXCELLENT/GOOD/QUALIFIED/WARNING/BLOCKED',
+    calculated_at           DATETIME     NOT NULL,
+    created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB COMMENT='供应商评分汇总';
+
+-- -----------------------------------------------------------
+-- 27. 供应商评分明细 (supplier_score_detail)
+-- -----------------------------------------------------------
+CREATE TABLE supplier_score_detail (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id     BIGINT       NOT NULL,
+    rule_version    INT          NOT NULL,
+    dimension       VARCHAR(32)  NOT NULL COMMENT '评分维度',
+    raw_value       DECIMAL(12,4) COMMENT '原始指标值',
+    score           DECIMAL(6,2) NOT NULL COMMENT '维度得分(0-100)',
+    weighted_score  DECIMAL(6,2) NOT NULL COMMENT '加权后得分',
+    data_summary    TEXT         COMMENT '计算依据(JSON)',
+    calculated_at   DATETIME     NOT NULL,
+    INDEX idx_supplier_dim (supplier_id, dimension),
+    INDEX idx_calculated (calculated_at)
+) ENGINE=InnoDB COMMENT='供应商评分明细';
+
+-- -----------------------------------------------------------
+-- 28. 供应商评分人工调整 (supplier_score_adjustment)
+-- -----------------------------------------------------------
+CREATE TABLE supplier_score_adjustment (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id     BIGINT       NOT NULL,
+    dimension       VARCHAR(32)  COMMENT 'NULL=调整总分',
+    original_score  DECIMAL(6,2) NOT NULL,
+    adjusted_score  DECIMAL(6,2) NOT NULL,
+    reason          VARCHAR(512) NOT NULL,
+    adjusted_by     BIGINT       NOT NULL,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_supplier (supplier_id)
+) ENGINE=InnoDB COMMENT='供应商评分人工调整';
+
+-- -----------------------------------------------------------
+-- 29. 供应商评分快照 (supplier_score_snapshot)
+-- -----------------------------------------------------------
+CREATE TABLE supplier_score_snapshot (
+    id              BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id     BIGINT       NOT NULL,
+    business_type   VARCHAR(32)  NOT NULL DEFAULT 'PO' COMMENT 'PO/COMPARISON',
+    business_id     BIGINT       NOT NULL,
+    rule_version    INT          NOT NULL,
+    total_score     DECIMAL(6,2) NOT NULL,
+    score_level     VARCHAR(16)  NOT NULL,
+    score_detail    TEXT         COMMENT '各维度分数JSON快照',
+    snapshot_at     DATETIME     NOT NULL,
+    INDEX idx_business (business_type, business_id),
+    INDEX idx_supplier (supplier_id)
+) ENGINE=InnoDB COMMENT='供应商评分快照';

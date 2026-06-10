@@ -295,3 +295,77 @@ CREATE TABLE IF NOT EXISTS reminder (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     idempotency_key VARCHAR(128)
 );
+
+CREATE TABLE IF NOT EXISTS supplier_score_rule (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    version INT NOT NULL UNIQUE,
+    name VARCHAR(128) NOT NULL,
+    quote_response_weight DECIMAL(5,2) NOT NULL DEFAULT 10.00,
+    price_deviation_weight DECIMAL(5,2) NOT NULL DEFAULT 15.00,
+    delivery_on_time_weight DECIMAL(5,2) NOT NULL DEFAULT 20.00,
+    arrival_diff_weight DECIMAL(5,2) NOT NULL DEFAULT 10.00,
+    qc_reject_weight DECIMAL(5,2) NOT NULL DEFAULT 20.00,
+    return_rate_weight DECIMAL(5,2) NOT NULL DEFAULT 10.00,
+    invoice_diff_weight DECIMAL(5,2) NOT NULL DEFAULT 10.00,
+    approval_anomaly_weight DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+    warning_threshold DECIMAL(5,2) NOT NULL DEFAULT 60.00,
+    block_threshold DECIMAL(5,2) NOT NULL DEFAULT 40.00,
+    active INT NOT NULL DEFAULT 0,
+    created_by BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS supplier_score (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id BIGINT NOT NULL UNIQUE,
+    rule_version INT NOT NULL,
+    total_score DECIMAL(6,2) NOT NULL DEFAULT 100.00,
+    quote_response_score DECIMAL(6,2) DEFAULT 100.00,
+    price_deviation_score DECIMAL(6,2) DEFAULT 100.00,
+    delivery_on_time_score DECIMAL(6,2) DEFAULT 100.00,
+    arrival_diff_score DECIMAL(6,2) DEFAULT 100.00,
+    qc_reject_score DECIMAL(6,2) DEFAULT 100.00,
+    return_rate_score DECIMAL(6,2) DEFAULT 100.00,
+    invoice_diff_score DECIMAL(6,2) DEFAULT 100.00,
+    approval_anomaly_score DECIMAL(6,2) DEFAULT 100.00,
+    score_level VARCHAR(16) NOT NULL DEFAULT 'EXCELLENT',
+    calculated_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS supplier_score_detail (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id BIGINT NOT NULL,
+    rule_version INT NOT NULL,
+    dimension VARCHAR(32) NOT NULL,
+    raw_value DECIMAL(12,4),
+    score DECIMAL(6,2) NOT NULL,
+    weighted_score DECIMAL(6,2) NOT NULL,
+    data_summary TEXT,
+    calculated_at TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS supplier_score_adjustment (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id BIGINT NOT NULL,
+    dimension VARCHAR(32),
+    original_score DECIMAL(6,2) NOT NULL,
+    adjusted_score DECIMAL(6,2) NOT NULL,
+    reason VARCHAR(512) NOT NULL,
+    adjusted_by BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS supplier_score_snapshot (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    supplier_id BIGINT NOT NULL,
+    business_type VARCHAR(32) NOT NULL DEFAULT 'PO',
+    business_id BIGINT NOT NULL,
+    rule_version INT NOT NULL,
+    total_score DECIMAL(6,2) NOT NULL,
+    score_level VARCHAR(16) NOT NULL,
+    score_detail TEXT,
+    snapshot_at TIMESTAMP NOT NULL
+);

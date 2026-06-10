@@ -41,6 +41,9 @@ class RfqServiceTest {
     @Mock
     private QuoteService quoteService;
 
+    @Mock
+    private SupplierScoreService supplierScoreService;
+
     @BeforeEach
     void setUp() {
         LoginUser user = new LoginUser(1L, "purchaser01", "PURCHASER", null);
