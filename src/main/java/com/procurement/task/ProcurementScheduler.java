@@ -7,12 +7,14 @@ import com.procurement.service.QuoteService;
 import com.procurement.service.SupplierScoreService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 定时任务调度器
@@ -30,6 +32,9 @@ public class ProcurementScheduler {
     private final ReminderMapper reminderMapper;
     private final PurchaseOrderMapper poMapper;
     private final SupplierScoreService supplierScoreService;
+    private final RedisTemplate<String, Object> redisTemplate;
+
+    private static final String SCORE_RECALC_LOCK = "procurement:score:recalculate:lock";
 
     /**
      * 每10分钟检查一次：报价截止后自动冻结所有报价
@@ -123,12 +128,22 @@ public class ProcurementScheduler {
 
     /**
      * 每天凌晨2:00重算所有活跃供应商的履约评分
+     * 使用 Redis 分布式锁防止多实例并发重算
      */
     @Scheduled(cron = "0 0 2 * * ?")
-    @Transactional
     public void recalculateSupplierScores() {
-        log.info("开始重算供应商履约评分...");
-        supplierScoreService.recalculateAll();
-        log.info("供应商履约评分重算完成");
+        Boolean locked = redisTemplate.opsForValue()
+                .setIfAbsent(SCORE_RECALC_LOCK, "1", 30, TimeUnit.MINUTES);
+        if (locked == null || !locked) {
+            log.info("供应商评分重算已在其他实例执行中，跳过");
+            return;
+        }
+        try {
+            log.info("开始重算供应商履约评分...");
+            supplierScoreService.recalculateAll();
+            log.info("供应商履约评分重算完成");
+        } finally {
+            redisTemplate.delete(SCORE_RECALC_LOCK);
+        }
     }
 }

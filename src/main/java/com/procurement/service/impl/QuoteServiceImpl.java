@@ -105,6 +105,7 @@ public class QuoteServiceImpl implements QuoteService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "FREEZE_QUOTE", entityType = "Quote")
     public void freezeQuote(Long quoteId) {
         Quote quote = quoteMapper.selectById(quoteId);

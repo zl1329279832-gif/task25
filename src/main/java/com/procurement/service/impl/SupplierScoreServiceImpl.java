@@ -9,6 +9,7 @@ import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
 import com.procurement.service.SupplierScoreService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +43,11 @@ public class SupplierScoreServiceImpl implements SupplierScoreService {
     private final ReturnOrderMapper returnOrderMapper;
     private final ReconciliationMapper reconciliationMapper;
     private final ApprovalMapper approvalMapper;
+
+    /** 自注入代理，确保内部调用 calculateScore() 走 Spring 事务代理 */
+    @org.springframework.beans.factory.annotation.Autowired
+    @Lazy
+    private SupplierScoreService self;
 
     @Override
     @Transactional
@@ -132,12 +138,15 @@ public class SupplierScoreServiceImpl implements SupplierScoreService {
     }
 
     @Override
-    @Transactional
     public void recalculateAll() {
         List<Supplier> suppliers = supplierMapper.selectList(
                 new LambdaQueryWrapper<Supplier>().eq(Supplier::getStatus, "ACTIVE"));
         for (Supplier s : suppliers) {
-            calculateScore(s.getId());
+            try {
+                self.calculateScore(s.getId());
+            } catch (Exception e) {
+                // 单个供应商评分失败不影响其他供应商
+            }
         }
     }
 
@@ -219,7 +228,7 @@ public class SupplierScoreServiceImpl implements SupplierScoreService {
         snapshot.setTotalScore(score != null ? score.getTotalScore() : BigDecimal.valueOf(50));
         snapshot.setRuleVersionNo(rule.getVersionNo());
 
-        // 保存完整快照数据
+        // 保存完整快照数据（含规则权重与阈值）
         StringBuilder sb = new StringBuilder("{");
         if (score != null) {
             List<SupplierScoreDetail> details = getScoreDetails(score.getId());
@@ -237,6 +246,8 @@ public class SupplierScoreServiceImpl implements SupplierScoreService {
         } else {
             sb.append("\"totalScore\":50,\"sampleSize\":0,\"dimensions\":[]");
         }
+        sb.append(",\"ruleWeights\":").append(escapeJsonValue(rule.getWeights()));
+        sb.append(",\"ruleThresholds\":").append(escapeJsonValue(rule.getThresholds()));
         sb.append("}");
         snapshot.setSnapshotData(sb.toString());
 
@@ -610,6 +621,10 @@ public class SupplierScoreServiceImpl implements SupplierScoreService {
     }
 
     // ==================== 辅助方法 ====================
+
+    private String escapeJsonValue(String jsonStr) {
+        return jsonStr != null ? jsonStr : "{}";
+    }
 
     private BigDecimal addDetail(List<SupplierScoreDetail> details, String dimension,
                                   BigDecimal rawValue, BigDecimal normalizedScore, BigDecimal weight) {

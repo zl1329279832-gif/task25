@@ -37,14 +37,14 @@ public class AdmissionControlServiceImpl implements AdmissionControlService {
         // 黑名单硬拦截
         if ("BLACKLISTED".equals(supplier.getStatus())) {
             AdmissionResult result = AdmissionResult.blocked(null, "供应商已被列入黑名单");
-            logAdmission(supplierId, checkpoint, result, null, businessId);
+            logAdmission(supplierId, checkpoint, result, null, businessId, null);
             throw new BusinessException("供应商已被列入黑名单，不允许操作");
         }
 
         // 停用硬拦截
         if ("DISABLED".equals(supplier.getStatus())) {
             AdmissionResult result = AdmissionResult.blocked(null, "供应商已被停用");
-            logAdmission(supplierId, checkpoint, result, null, businessId);
+            logAdmission(supplierId, checkpoint, result, null, businessId, null);
             throw new BusinessException("供应商已被停用，不允许操作");
         }
 
@@ -56,7 +56,7 @@ public class AdmissionControlServiceImpl implements AdmissionControlService {
         // 无评分记录，默认通过
         if (score == null) {
             AdmissionResult result = AdmissionResult.allowed(null);
-            logAdmission(supplierId, checkpoint, result, null, businessId);
+            logAdmission(supplierId, checkpoint, result, null, businessId, null);
             return result;
         }
 
@@ -79,20 +79,24 @@ public class AdmissionControlServiceImpl implements AdmissionControlService {
             extraApprovalThreshold = parseThreshold(rule.getThresholds(), "extraApprovalScore", 70);
         }
 
+        String thresholdSnap = "{\"blacklistScore\":" + blacklistThreshold
+                + ",\"restrictedScore\":" + restrictedThreshold
+                + ",\"extraApprovalScore\":" + extraApprovalThreshold + "}";
+
         // 4. 决策
         AdmissionResult result;
         if (currentScore.compareTo(blacklistThreshold) < 0) {
             result = AdmissionResult.blocked(currentScore,
                     "供应商评分(" + currentScore + ")低于黑名单阈值(" + blacklistThreshold + ")");
-            logAdmission(supplierId, checkpoint, result, rule, businessId);
+            logAdmission(supplierId, checkpoint, result, rule, businessId, thresholdSnap);
             throw new BusinessException(result.getReason());
         } else if (currentScore.compareTo(extraApprovalThreshold) < 0) {
             result = AdmissionResult.restricted(currentScore,
                     "供应商评分(" + currentScore + ")低于准入阈值(" + extraApprovalThreshold + ")，需额外审批");
-            logAdmission(supplierId, checkpoint, result, rule, businessId);
+            logAdmission(supplierId, checkpoint, result, rule, businessId, thresholdSnap);
         } else {
             result = AdmissionResult.allowed(currentScore);
-            logAdmission(supplierId, checkpoint, result, rule, businessId);
+            logAdmission(supplierId, checkpoint, result, rule, businessId, thresholdSnap);
         }
 
         return result;
@@ -109,7 +113,7 @@ public class AdmissionControlServiceImpl implements AdmissionControlService {
     }
 
     private void logAdmission(Long supplierId, String checkpoint, AdmissionResult result,
-                               ScoringRuleVersion rule, Long businessId) {
+                               ScoringRuleVersion rule, Long businessId, String thresholdSnapshot) {
         SupplierAdmissionLog log = new SupplierAdmissionLog();
         log.setSupplierId(supplierId);
         log.setCheckpoint(checkpoint);
@@ -118,6 +122,7 @@ public class AdmissionControlServiceImpl implements AdmissionControlService {
         log.setRuleVersionNo(rule != null ? rule.getVersionNo() : null);
         log.setReason(result.getReason());
         log.setBusinessId(businessId);
+        log.setThresholdSnapshot(thresholdSnapshot);
         try {
             LoginUser user = (LoginUser) SecurityContextHolder.getContext()
                     .getAuthentication().getPrincipal();

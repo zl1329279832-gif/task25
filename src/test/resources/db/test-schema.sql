@@ -363,5 +363,6 @@ CREATE TABLE IF NOT EXISTS supplier_admission_log (
     reason VARCHAR(256),
     operator_id BIGINT,
     business_id BIGINT,
+    threshold_snapshot VARCHAR(512),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

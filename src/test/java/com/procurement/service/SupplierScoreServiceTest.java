@@ -16,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -51,6 +52,7 @@ class SupplierScoreServiceTest {
     @Mock private ReturnOrderMapper returnOrderMapper;
     @Mock private ReconciliationMapper reconciliationMapper;
     @Mock private ApprovalMapper approvalMapper;
+    @Mock private SupplierScoreService selfProxy;
 
     private ScoringRuleVersion activeRule;
 
@@ -468,18 +470,16 @@ class SupplierScoreServiceTest {
         s2.setStatus("ACTIVE");
 
         when(supplierMapper.selectList(any())).thenReturn(List.of(s1, s2));
-        mockActiveRule();
-        mockNoData();
 
-        // 需要两次 calculateScore 的 mock
-        when(scoreMapper.selectOne(any())).thenReturn(null);
-        when(scoreMapper.insert(any())).thenReturn(1);
+        // 注入 self 代理 mock
+        ReflectionTestUtils.setField(scoreService, "self", selfProxy);
+        when(selfProxy.calculateScore(anyLong())).thenReturn(new SupplierScore());
 
         scoreService.recalculateAll();
 
         verify(supplierMapper).selectList(any());
-        // 至少调用了两次insert（两个供应商）
-        verify(scoreMapper, atLeast(2)).insert(any());
+        verify(selfProxy).calculateScore(1L);
+        verify(selfProxy).calculateScore(2L);
     }
 
     @Test
