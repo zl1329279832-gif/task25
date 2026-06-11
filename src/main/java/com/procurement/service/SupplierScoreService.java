@@ -28,6 +28,8 @@ public interface SupplierScoreService {
 
     SupplierScoreSnapshot createSnapshot(Long poId, Long supplierId);
 
+    SupplierScoreSnapshot createQuoteSnapshot(Long quoteId, Long supplierId);
+
     ScoringRuleVersion createRuleVersion(String weights, String thresholds);
 
     ScoringRuleVersion getActiveRuleVersion();

@@ -3,6 +3,8 @@ package com.procurement.service;
 import com.procurement.common.BusinessException;
 import com.procurement.entity.*;
 import com.procurement.mapper.*;
+import com.procurement.service.QuoteService;
+import com.procurement.service.SupplierScoreService;
 import com.procurement.service.impl.QuoteServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,15 @@ class QuoteServiceTest {
 
     @Mock
     private RfqMapper rfqMapper;
+
+    @Mock
+    private SupplierScoreMapper supplierScoreMapper;
+
+    @Mock
+    private ScoringRuleVersionMapper ruleVersionMapper;
+
+    @Mock
+    private SupplierScoreService supplierScoreService;
 
     @Mock
     private RedisTemplate<String, Object> redisTemplate;

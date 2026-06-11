@@ -18,6 +18,8 @@ public class Quote {
     private BigDecimal totalAmount;
     private String status;
     private Integer frozen;
+    private BigDecimal scoreAtFreeze;
+    private Integer scoreRuleVersionAtFreeze;
     private LocalDateTime submittedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

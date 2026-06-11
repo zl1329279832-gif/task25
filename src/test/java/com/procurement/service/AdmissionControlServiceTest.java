@@ -30,6 +30,7 @@ class AdmissionControlServiceTest {
     @Mock private SupplierScoreMapper scoreMapper;
     @Mock private SupplierAdmissionLogMapper admissionLogMapper;
     @Mock private ScoringRuleVersionMapper ruleVersionMapper;
+    @Mock private SupplierScoreSnapshotMapper snapshotMapper;
 
     private ScoringRuleVersion activeRule;
 

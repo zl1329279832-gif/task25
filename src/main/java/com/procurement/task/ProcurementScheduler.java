@@ -123,9 +123,10 @@ public class ProcurementScheduler {
 
     /**
      * 每天凌晨2:00重算所有活跃供应商的履约评分
+     * 不在此方法上加 @Transactional，事务由内部 ScoreCalculationService 的 REQUIRES_NEW 管理，
+     * 避免长事务持锁导致并发准入检查读到部分更新的评分。
      */
     @Scheduled(cron = "0 0 2 * * ?")
-    @Transactional
     public void recalculateSupplierScores() {
         log.info("开始重算供应商履约评分...");
         supplierScoreService.recalculateAll();

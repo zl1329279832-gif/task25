@@ -56,15 +56,11 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             poLineMapper.insert(line);
         }
 
-        // 创建供应商评分快照
-        try {
-            SupplierScoreSnapshot snapshot = supplierScoreService.createSnapshot(po.getId(), po.getSupplierId());
-            po.setSupplierScore(snapshot.getTotalScore());
-            po.setScoreRuleVersion(snapshot.getRuleVersionNo());
-            poMapper.updateById(po);
-        } catch (Exception e) {
-            // 评分快照创建失败不阻断PO创建
-        }
+        // 创建供应商评分快照 — 失败时回滚PO创建（保证PO与快照原子绑定）
+        SupplierScoreSnapshot snapshot = supplierScoreService.createSnapshot(po.getId(), po.getSupplierId());
+        po.setSupplierScore(snapshot.getTotalScore());
+        po.setScoreRuleVersion(snapshot.getRuleVersionNo());
+        poMapper.updateById(po);
 
         return po;
     }

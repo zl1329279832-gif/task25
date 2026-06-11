@@ -6,6 +6,7 @@ import com.procurement.common.BusinessException;
 import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.service.QuoteService;
+import com.procurement.service.SupplierScoreService;
 import com.procurement.state.QuoteStateMachine;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -24,6 +25,9 @@ public class QuoteServiceImpl implements QuoteService {
     private final QuoteMapper quoteMapper;
     private final QuoteLineMapper quoteLineMapper;
     private final RfqMapper rfqMapper;
+    private final SupplierScoreMapper supplierScoreMapper;
+    private final ScoringRuleVersionMapper ruleVersionMapper;
+    private final SupplierScoreService supplierScoreService;
     private final RedisTemplate<String, Object> redisTemplate;
 
     private static final String QUOTE_LOCK_PREFIX = "quote:lock:";
@@ -105,14 +109,26 @@ public class QuoteServiceImpl implements QuoteService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "FREEZE_QUOTE", entityType = "Quote")
     public void freezeQuote(Long quoteId) {
         Quote quote = quoteMapper.selectById(quoteId);
         if (quote == null) throw new BusinessException("报价单不存在");
         QuoteStateMachine.validateTransition(QuoteStatus.valueOf(quote.getStatus()), QuoteStatus.FROZEN);
+
+        // 捕获冻结时供应商评分
+        captureScoreAtFreeze(quote);
+
         quote.setFrozen(1);
         quote.setStatus(QuoteStatus.FROZEN.name());
         quoteMapper.updateById(quote);
+
+        // 创建冻结快照
+        try {
+            supplierScoreService.createQuoteSnapshot(quoteId, quote.getSupplierId());
+        } catch (Exception e) {
+            // 快照创建失败不阻断冻结操作（非事务关键路径）
+        }
     }
 
     @Override
@@ -123,9 +139,19 @@ public class QuoteServiceImpl implements QuoteService {
                         .eq(Quote::getRfqId, rfqId)
                         .eq(Quote::getFrozen, 0));
         for (Quote q : quotes) {
+            // 捕获冻结时供应商评分
+            captureScoreAtFreeze(q);
+
             q.setFrozen(1);
             q.setStatus(QuoteStatus.FROZEN.name());
             quoteMapper.updateById(q);
+
+            // 创建冻结快照
+            try {
+                supplierScoreService.createQuoteSnapshot(q.getId(), q.getSupplierId());
+            } catch (Exception e) {
+                // 快照创建失败不阻断冻结操作
+            }
         }
     }
 
@@ -152,5 +178,22 @@ public class QuoteServiceImpl implements QuoteService {
     public List<QuoteLine> getQuoteLines(Long quoteId) {
         return quoteLineMapper.selectList(
                 new LambdaQueryWrapper<QuoteLine>().eq(QuoteLine::getQuoteId, quoteId));
+    }
+
+    /**
+     * 捕获冻结时的供应商评分和规则版本号
+     */
+    private void captureScoreAtFreeze(Quote quote) {
+        SupplierScore score = supplierScoreMapper.selectOne(
+                new LambdaQueryWrapper<SupplierScore>()
+                        .eq(SupplierScore::getSupplierId, quote.getSupplierId()));
+        quote.setScoreAtFreeze(score != null ? score.getTotalScore() : BigDecimal.valueOf(50));
+
+        ScoringRuleVersion rule = ruleVersionMapper.selectOne(
+                new LambdaQueryWrapper<ScoringRuleVersion>()
+                        .eq(ScoringRuleVersion::getStatus, "ACTIVE")
+                        .orderByDesc(ScoringRuleVersion::getVersionNo)
+                        .last("LIMIT 1"));
+        quote.setScoreRuleVersionAtFreeze(rule != null ? rule.getVersionNo() : null);
     }
 }

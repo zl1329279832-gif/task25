@@ -24,6 +24,7 @@ public class AdmissionControlServiceImpl implements AdmissionControlService {
     private final SupplierScoreMapper scoreMapper;
     private final SupplierAdmissionLogMapper admissionLogMapper;
     private final ScoringRuleVersionMapper ruleVersionMapper;
+    private final SupplierScoreSnapshotMapper snapshotMapper;
 
     @Override
     @Transactional
@@ -48,26 +49,50 @@ public class AdmissionControlServiceImpl implements AdmissionControlService {
             throw new BusinessException("供应商已被停用，不允许操作");
         }
 
-        // 2. 获取评分
-        SupplierScore score = scoreMapper.selectOne(
-                new LambdaQueryWrapper<SupplierScore>()
-                        .eq(SupplierScore::getSupplierId, supplierId));
+        // 2. 获取评分 — PO确认场景优先使用快照评分
+        BigDecimal currentScore = null;
+        Long snapshotId = null;
+        Integer snapshotRuleVersionNo = null;
 
-        // 无评分记录，默认通过
-        if (score == null) {
-            AdmissionResult result = AdmissionResult.allowed(null);
-            logAdmission(supplierId, checkpoint, result, null, businessId);
-            return result;
+        if ("PO_CONFIRM".equals(checkpoint) && businessId != null) {
+            SupplierScoreSnapshot snapshot = snapshotMapper.selectOne(
+                    new LambdaQueryWrapper<SupplierScoreSnapshot>()
+                            .eq(SupplierScoreSnapshot::getPoId, businessId));
+            if (snapshot != null) {
+                currentScore = snapshot.getTotalScore();
+                snapshotId = snapshot.getId();
+                snapshotRuleVersionNo = snapshot.getRuleVersionNo();
+            }
         }
 
-        BigDecimal currentScore = score.getTotalScore();
+        // 降级读活分
+        if (currentScore == null) {
+            SupplierScore score = scoreMapper.selectOne(
+                    new LambdaQueryWrapper<SupplierScore>()
+                            .eq(SupplierScore::getSupplierId, supplierId));
+            if (score == null) {
+                // 无评分记录，默认通过
+                AdmissionResult result = AdmissionResult.allowed(null, snapshotId);
+                logAdmission(supplierId, checkpoint, result, null, businessId);
+                return result;
+            }
+            currentScore = score.getTotalScore();
+        }
 
-        // 3. 获取阈值
-        ScoringRuleVersion rule = ruleVersionMapper.selectOne(
-                new LambdaQueryWrapper<ScoringRuleVersion>()
-                        .eq(ScoringRuleVersion::getStatus, "ACTIVE")
-                        .orderByDesc(ScoringRuleVersion::getVersionNo)
-                        .last("LIMIT 1"));
+        // 3. 获取阈值 — 优先使用快照关联的规则版本
+        ScoringRuleVersion rule;
+        if (snapshotRuleVersionNo != null) {
+            rule = ruleVersionMapper.selectOne(
+                    new LambdaQueryWrapper<ScoringRuleVersion>()
+                            .eq(ScoringRuleVersion::getVersionNo, snapshotRuleVersionNo)
+                            .last("LIMIT 1"));
+        } else {
+            rule = ruleVersionMapper.selectOne(
+                    new LambdaQueryWrapper<ScoringRuleVersion>()
+                            .eq(ScoringRuleVersion::getStatus, "ACTIVE")
+                            .orderByDesc(ScoringRuleVersion::getVersionNo)
+                            .last("LIMIT 1"));
+        }
 
         BigDecimal blacklistThreshold = BigDecimal.valueOf(20);
         BigDecimal restrictedThreshold = BigDecimal.valueOf(50);
@@ -83,15 +108,15 @@ public class AdmissionControlServiceImpl implements AdmissionControlService {
         AdmissionResult result;
         if (currentScore.compareTo(blacklistThreshold) < 0) {
             result = AdmissionResult.blocked(currentScore,
-                    "供应商评分(" + currentScore + ")低于黑名单阈值(" + blacklistThreshold + ")");
+                    "供应商评分(" + currentScore + ")低于黑名单阈值(" + blacklistThreshold + ")", snapshotId);
             logAdmission(supplierId, checkpoint, result, rule, businessId);
             throw new BusinessException(result.getReason());
         } else if (currentScore.compareTo(extraApprovalThreshold) < 0) {
             result = AdmissionResult.restricted(currentScore,
-                    "供应商评分(" + currentScore + ")低于准入阈值(" + extraApprovalThreshold + ")，需额外审批");
+                    "供应商评分(" + currentScore + ")低于准入阈值(" + extraApprovalThreshold + ")，需额外审批", snapshotId);
             logAdmission(supplierId, checkpoint, result, rule, businessId);
         } else {
-            result = AdmissionResult.allowed(currentScore);
+            result = AdmissionResult.allowed(currentScore, snapshotId);
             logAdmission(supplierId, checkpoint, result, rule, businessId);
         }
 
@@ -118,6 +143,7 @@ public class AdmissionControlServiceImpl implements AdmissionControlService {
         log.setRuleVersionNo(rule != null ? rule.getVersionNo() : null);
         log.setReason(result.getReason());
         log.setBusinessId(businessId);
+        log.setScoreSnapshotId(result.getSnapshotId());
         try {
             LoginUser user = (LoginUser) SecurityContextHolder.getContext()
                     .getAuthentication().getPrincipal();

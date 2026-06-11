@@ -132,6 +132,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "APPROVE_RECONCILIATION", entityType = "Reconciliation")
     public void approve(Long reconId) {
         Reconciliation recon = reconMapper.selectById(reconId);
@@ -143,6 +144,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "REJECT_RECONCILIATION", entityType = "Reconciliation")
     public void reject(Long reconId, String remark) {
         Reconciliation recon = reconMapper.selectById(reconId);

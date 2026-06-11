@@ -112,6 +112,8 @@ CREATE TABLE quote (
     total_amount    DECIMAL(14,2),
     status          VARCHAR(16)  NOT NULL DEFAULT 'DRAFT' COMMENT 'DRAFT / SUBMITTED / ACCEPTED / REJECTED / FROZEN',
     frozen          TINYINT      NOT NULL DEFAULT 0 COMMENT '1=已冻结（截止后自动冻结）',
+    score_at_freeze DECIMAL(6,2) NULL COMMENT '冻结时供应商评分',
+    score_rule_version_at_freeze INT NULL COMMENT '冻结时评分规则版本号',
     submitted_at    DATETIME     NULL,
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -427,6 +429,7 @@ CREATE TABLE supplier_score (
     sample_size     INT          NOT NULL DEFAULT 0 COMMENT '参与计算的PO数量',
     calculated_at   DATETIME     NOT NULL COMMENT '计算时间',
     source          VARCHAR(16)  NOT NULL DEFAULT 'SYSTEM' COMMENT 'SYSTEM / MANUAL',
+    version         INT          NOT NULL DEFAULT 0 COMMENT '乐观锁版本号',
     UNIQUE KEY uk_supplier (supplier_id)
 ) ENGINE=InnoDB COMMENT='供应商综合评分';
 
@@ -464,14 +467,16 @@ CREATE TABLE supplier_score_adjustment (
 -- -----------------------------------------------------------
 CREATE TABLE supplier_score_snapshot (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY,
-    po_id           BIGINT       NOT NULL,
+    po_id           BIGINT       NULL COMMENT '关联采购订单',
+    quote_id        BIGINT       NULL COMMENT '关联报价（冻结快照）',
     supplier_id     BIGINT       NOT NULL,
     total_score     DECIMAL(6,2) NOT NULL,
     rule_version_no INT          NOT NULL,
     snapshot_data   TEXT         NOT NULL COMMENT 'JSON: 完整评分快照',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uk_po (po_id),
-    INDEX idx_supplier (supplier_id)
+    INDEX idx_supplier (supplier_id),
+    INDEX idx_quote (quote_id)
 ) ENGINE=InnoDB COMMENT='采购订单评分快照';
 
 -- -----------------------------------------------------------
@@ -487,6 +492,7 @@ CREATE TABLE supplier_admission_log (
     reason          VARCHAR(256),
     operator_id     BIGINT,
     business_id     BIGINT       COMMENT '关联的业务实体ID',
+    score_snapshot_id BIGINT     NULL COMMENT '关联评分快照ID',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_supplier (supplier_id),
     INDEX idx_checkpoint (checkpoint)

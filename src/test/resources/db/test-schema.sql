@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS quote (
     total_amount DECIMAL(14,2),
     status VARCHAR(16) NOT NULL DEFAULT 'DRAFT',
     frozen INT NOT NULL DEFAULT 0,
+    score_at_freeze DECIMAL(6,2),
+    score_rule_version_at_freeze INT,
     submitted_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -317,7 +319,8 @@ CREATE TABLE IF NOT EXISTS supplier_score (
     total_score DECIMAL(6,2) NOT NULL,
     sample_size INT NOT NULL DEFAULT 0,
     calculated_at TIMESTAMP NOT NULL,
-    source VARCHAR(16) NOT NULL DEFAULT 'SYSTEM'
+    source VARCHAR(16) NOT NULL DEFAULT 'SYSTEM',
+    version INT NOT NULL DEFAULT 0
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uk_supplier_score ON supplier_score(supplier_id);
 
@@ -344,7 +347,8 @@ CREATE TABLE IF NOT EXISTS supplier_score_adjustment (
 
 CREATE TABLE IF NOT EXISTS supplier_score_snapshot (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    po_id BIGINT NOT NULL,
+    po_id BIGINT,
+    quote_id BIGINT,
     supplier_id BIGINT NOT NULL,
     total_score DECIMAL(6,2) NOT NULL,
     rule_version_no INT NOT NULL,
@@ -363,5 +367,6 @@ CREATE TABLE IF NOT EXISTS supplier_admission_log (
     reason VARCHAR(256),
     operator_id BIGINT,
     business_id BIGINT,
+    score_snapshot_id BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

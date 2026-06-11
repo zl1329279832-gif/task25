@@ -81,6 +81,7 @@ public class ArrivalServiceImpl implements ArrivalService {
     }
 
     @Override
+    @Transactional
     @Auditable(action = "UPDATE_ARRIVAL_STATUS", entityType = "Arrival")
     public void updateStatus(Long arrivalId, String status) {
         Arrival arrival = arrivalMapper.selectById(arrivalId);

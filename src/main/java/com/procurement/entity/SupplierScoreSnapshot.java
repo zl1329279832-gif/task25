@@ -12,6 +12,7 @@ public class SupplierScoreSnapshot {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long poId;
+    private Long quoteId;
     private Long supplierId;
     private BigDecimal totalScore;
     private Integer ruleVersionNo;

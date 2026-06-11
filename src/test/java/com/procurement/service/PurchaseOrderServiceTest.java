@@ -4,6 +4,7 @@ import com.procurement.common.BusinessException;
 import com.procurement.entity.PoStatus;
 import com.procurement.entity.PurchaseOrder;
 import com.procurement.entity.PurchaseOrderLine;
+import com.procurement.entity.SupplierScoreSnapshot;
 import com.procurement.mapper.ApprovalMapper;
 import com.procurement.mapper.PurchaseOrderLineMapper;
 import com.procurement.mapper.PurchaseOrderMapper;
@@ -66,6 +67,12 @@ class PurchaseOrderServiceTest {
 
         when(poMapper.insert(any())).thenReturn(1);
         when(poLineMapper.insert(any())).thenReturn(1);
+
+        // mock 评分快照返回
+        SupplierScoreSnapshot snapshot = new SupplierScoreSnapshot();
+        snapshot.setTotalScore(new BigDecimal("75.00"));
+        snapshot.setRuleVersionNo(1);
+        when(supplierScoreService.createSnapshot(any(), any())).thenReturn(snapshot);
 
         PurchaseOrder result = poService.create(po, List.of(line));
 

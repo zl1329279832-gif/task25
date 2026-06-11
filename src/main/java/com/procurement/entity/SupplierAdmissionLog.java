@@ -19,5 +19,6 @@ public class SupplierAdmissionLog {
     private String reason;
     private Long operatorId;
     private Long businessId;
+    private Long scoreSnapshotId;
     private LocalDateTime createdAt;
 }

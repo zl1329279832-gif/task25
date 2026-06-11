@@ -5,6 +5,7 @@ import com.procurement.common.BusinessException;
 import com.procurement.entity.*;
 import com.procurement.mapper.*;
 import com.procurement.security.LoginUser;
+import com.procurement.service.ScoreCalculationService;
 import com.procurement.service.impl.SupplierScoreServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,7 @@ class SupplierScoreServiceTest {
     @Mock private ReturnOrderMapper returnOrderMapper;
     @Mock private ReconciliationMapper reconciliationMapper;
     @Mock private ApprovalMapper approvalMapper;
+    @Mock private ScoreCalculationService scoreCalculationService;
 
     private ScoringRuleVersion activeRule;
 
@@ -468,18 +470,38 @@ class SupplierScoreServiceTest {
         s2.setStatus("ACTIVE");
 
         when(supplierMapper.selectList(any())).thenReturn(List.of(s1, s2));
-        mockActiveRule();
-        mockNoData();
 
-        // 需要两次 calculateScore 的 mock
-        when(scoreMapper.selectOne(any())).thenReturn(null);
-        when(scoreMapper.insert(any())).thenReturn(1);
+        // 模拟 scoreCalculationService 返回新评分
+        SupplierScore newScore1 = new SupplierScore();
+        newScore1.setId(1L);
+        newScore1.setSupplierId(1L);
+        newScore1.setTotalScore(new BigDecimal("80.00"));
+        SupplierScore newScore2 = new SupplierScore();
+        newScore2.setId(2L);
+        newScore2.setSupplierId(2L);
+        newScore2.setTotalScore(new BigDecimal("70.00"));
+
+        when(scoreCalculationService.calculateSingleScore(1L)).thenReturn(newScore1);
+        when(scoreCalculationService.calculateSingleScore(2L)).thenReturn(newScore2);
+
+        // getCurrentScore 返回旧评分用于审计对比
+        SupplierScore oldScore1 = new SupplierScore();
+        oldScore1.setTotalScore(new BigDecimal("75.00"));
+        SupplierScore oldScore2 = new SupplierScore();
+        oldScore2.setTotalScore(new BigDecimal("65.00"));
+        when(scoreMapper.selectOne(any()))
+                .thenReturn(oldScore1)   // 第一次给s1的旧评分
+                .thenReturn(oldScore1)   // recalculateAll内部getCurrentScore(s1)
+                .thenReturn(oldScore2)   // 第二次给s2的旧评分
+                .thenReturn(oldScore2);  // recalculateAll内部getCurrentScore(s2)
+        when(adjustmentMapper.insert(any())).thenReturn(1);
 
         scoreService.recalculateAll();
 
         verify(supplierMapper).selectList(any());
-        // 至少调用了两次insert（两个供应商）
-        verify(scoreMapper, atLeast(2)).insert(any());
+        // 每个供应商各调用一次 calculateSingleScore
+        verify(scoreCalculationService).calculateSingleScore(1L);
+        verify(scoreCalculationService).calculateSingleScore(2L);
     }
 
     @Test
